@@ -1,0 +1,52 @@
+//////////////////这个是测试样例
+////需要覆盖各种数据类型、语句类型以及函数和过程，函数在表达式中被调用，过程在语句中调用
+///大概可以做一个输入三四个数然后排序的测试程序，函数和过程可以为空就。。。呵呵,哦对，算个平均值就行了
+//////输入 1406 11 12 188 3，输出 3 11 12 188 1406 平均数是（3+11+12+188+1406）/5 = 1620/5 = 324
+///program test
+const r = 1406;
+var   num:array[5]of integer;//这里好像多了一个空格，文法中没有规定
+var   i:integer;
+var   average:real;
+procedure sorting (var num:array[5]of integer);
+	var i,j,t:integer;
+	begin
+	for i=0 to 4
+	do
+		for j=i+1 to 4
+		do
+			if num[i]>num[j]
+			then 
+			begin
+				t = num[i]
+				num[i] = num[j]
+				num[j] = t
+			end
+	end 
+function getaverage (var num:array[5]of integer);
+	var i:integer;
+	var n:real;
+	begin
+		n = 0.0;
+		for i=0 to 4
+		do
+			n = num[i]+n
+		n = n/5
+	end
+begin
+	i=0
+	write("please input five numbers/n")////////////////////////////这里的回车，，，我也不知道行不行
+	read(num[0],num[1],num[2],num[3],num[4])
+	sorting(num)
+	average = getaverage
+	write("here are the results:/n")
+	do
+		begin
+		write(" ",num[i])
+		i = i+1
+		end
+	while i<=4
+	write("/n")
+	write("their average is:",average)
+end.
+
+

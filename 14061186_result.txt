@@ -1,0 +1,9 @@
+程序输出：please input five numbers
+输入  1406  11 12 188 3
+程序输出：here are the results：
+	 3 11 12 188 1406（注意起始位置是有一个空格的）
+	their average is：324
+
+
+
+测试完毕。
