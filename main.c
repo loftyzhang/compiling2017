@@ -11,7 +11,7 @@
 FILE* fin;
 int err = 0;//number of errors
 int num_t = 0;//读取的token数量
-int num_l = 0;
+int num_l = 0;//行数
 
 char curc;//当前字符current char
 
@@ -20,7 +20,6 @@ char* typeof_sym[] = {
 	"ident",    "rword",//标识符、保留字
     "illegal",  "string",//非法字符、字符串
     "lparen",   "rparen",//()
-    "lbrace",   "rbrace",//{}
     "lsqbra",   "rsqbra",//[]
     "adding",   "multiplying",//加减乘除
     "relation", "assignment",//关系运算符，赋值符号=
@@ -39,7 +38,6 @@ symbol token0;//当前的token
 
 void error(int a ,int b);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
-
 symbol get_sym();
 
 
@@ -82,11 +80,23 @@ int search_rword(char* s){//保留字数组为字典序
 
 symbol get_sym(){
     struct symbols token;
-    char c = '/0';
+    char c = '\0';
     int i = 0;
-    int j = 0;
+    float j = 0;
     c = fgetc(fin);
-    while(c=='/n'){
+    i = c - '\0';
+    switch(i){
+    	case 40:strcpy(token.name,"(");strcpy(token.tpye,"lparen");token.value = 0;break;///左括号
+    	case 41:strcpy(token.name,")");strcpy(token.type,"rparen");token.value = 0;break;///右括号
+    	case 44:strcpy(token.name,",");strcpy(token.type,"comma");token.value = 0;break;///逗号
+    	case 46:strcpy(token.name,".");strcpy(token.type,"period");token.value = 0;break;///句点
+    	case 58:strcpy(token.name,":");strcpy(token.type,"colon");token.value = 0;break;///冒号
+    	case 59:strcpy(token.name,";");strcpy(token.type,"semicolon");token.value = 0;break;///分号
+    	case 91:strcpy(token.name,"[");strcpy(token.type,"lsqbra");token.value = 0;break;///左方括号
+    	case 93:strcpy(token.name,"]");strcpy(token.type,"rsqbra");token.value = 0;break;///右方括号
+    	default:i = 0;break;
+   	}
+    while(c=='\n'){
     	num_t++;
     	c = fgetc(fin);
     }//跳过连续的换行
@@ -101,6 +111,172 @@ symbol get_sym(){
     	return token;
     }//文件结尾，停止读取，返回eof，程序结束
 ////标识符、保留字、运算符、函数、过程、标点符号
+    else if(c == '+'||c == '-'){
+    	token.name[0] = c;
+    	token.name[1] = '\0';
+    	strcpy(token.type,"adding");
+    	token.value = (float)(c-'\0');//加法运算符，保存ascii码作为其value
+    }
+    else if(c == '*'||c == '/'){
+    	token.name[0] = c;
+    	token.name[1] = '\0';
+    	strcpy(token.type,"multiplying");
+    	token.value = (float)(c - '\0');//乘法运算符
+    }
+    else if(c == '<'){
+    	if((c=fgetc(fin))=='='){
+    		token.name[0] = '<';
+    		token.name[1] = '=';
+    		token.name[2] = '\0';
+    		token.value = 0;//关系运算符之<=
+    	}
+    	else if(c == '>'){
+    		token.name[0] = '<';
+    		token.name[1] = '>';
+    		token.name[2] = '\0';
+    		token.value = 0;//关系运算符之<>
+    	}
+    	else{
+    		ungetc(fin);
+    		token.name[0] = c;
+    		token.name[1] = '\0';
+    		token.value = (float)(c - '\0');//关系运算符之<
+    	}
+    	strcpy(token.type,"relation");
+    }
+    else if(c == '>'){
+    	if((c=fgetc(fin))=='='){
+    		token.name[0] = '>';
+    		token.name[1] = '=';
+    		token.name[2] = '\0';
+    		token.value = 0;//关系运算符之>=
+    	}
+    	else {
+    		ungetc(fin);
+    		token.name[0] = '>';
+    		token.name[1] = '\0';
+    		token.value = (float)(c - '\0');//关系运算符之>
+    	}
+    	strcpy(token.type,"relation");
+    }
+    else if(c == '='){
+    	token.name[0] = c;
+    	token.name[1] = '\0';
+    	strcpy(token.type,"relation");
+    	token.value = (float)(c - '\0');//关系运算符之=
+    }
+    else if(c == 34){///双引号
+    	char* s;
+    	while((c = fgetc(fin))!='"'){
+    		s[i++] = c; 
+    	}
+    	s[i] = '\0';//字符串，没有考虑引号不配对等问题。字符串中没有保留引号
+    	strcpy(token.name,s);
+    	strcpy(token.type,"string");
+    	token.value = 0;
+    }
+    esle if(c == 39){///单引号
+    	c = fgetc(fin);
+    	token.name[0] = c;
+    	token.name[1] = '\0';
+    	strcpy(token.type,"char");//////字符
+    	token.value = c - '\0';
+    	if ((c=fgetc(fin))!=39){
+    		error(num_l,4);//引号不匹配
+    		strcpy(token.name,"illegal");
+    		strcpy(token.type,"illegal");
+    		token.value = 0;
+    		ungetc(fin);
+    		ungetc(fin);//不知道能不能连着两次ungetc，反正也没有这种奇葩错误把。。
+    	}
+    }
+    else if(c>='0'&&c<='9'){///数字
+    	char* s;
+    	s[0] = c;
+    	j = j + (c-'0');
+    	strcpy(token.type,"integer");
+    	while(1){//这里暂时仅对于第一次作业的要求进行设计，实际上需要考虑数字后出现的字符是否合法的问题，
+    			//正常来说数字后可以是空格、换行符、运算符等，而不会是eof(小数点算作数字的一部分)
+    		c = fgetc(fin);
+    		if(c>='0'&&c<='9'){
+    			s[++i] = c;
+    			j = 10*j + (c-'0');
+    		}
+    		else if(c == 46){
+    			int k=1;
+    			strcpy(token.type,"real");
+    			s[++i] = c;
+    			while(1){
+    				c = fgetc(fin);
+    				if(c>='0'&&C<='9'){
+    					j = j + (float)pow(0.1,k)*(c-'0');
+    					s[++i] = c;
+    					k = k+1;
+    				}
+    				else{
+    					s[++i] = '\0';//这里没有考虑报错的问题，只是认为数字结束
+       					ungetc(fin);
+    					break;
+    				}
+    			}//浮点数
+    			strcpy(token.name,s);
+    			token.value = j;
+    			break;
+    		}
+    		else{
+    			s[++i] = '\0';
+    			strcpy(token.name,s);
+    			token.value = j;///整数
+    			ungetc(fin);
+    			break;
+    		}
+    	}
+    }
+    else if(c>='a'&&c<='z'){
+    	int k = 0;
+    	char* s;
+    	s[0] = c;
+    	while(1){
+    		if(((c=fgetc(fin))<='z')&&(c>='a')||(c>='0'&&c<='9')||(c<='Z'&&c>='A')){//标识符
+    			s[++i] = c;
+    		}
+    		else{
+    			s[++i] = '\0';
+    			break;///标识符结束
+    		}
+    	}
+    	strcpy(token.name,s);
+    	k = search_rword(s);
+    	if(k>=0){
+    		strcpy(token.type,"rword");
+    		token.value = k;
+    	}
+    	else{
+    		strcpy(token.type,"ident");
+    		token.value = 0;
+    	}
+    }
+    else if(c>='A'&&c<='Z'){
+    	char* s;
+    	s[0] = c;
+    	while(1){
+    		if(((c=fgetc(fin))<='z')&&(c>='a')||(c>='0'&&c<='9')||(c<='Z'&&c>='A')){//标识符
+    			s[++i] = c;
+    		}
+    		else{
+    			s[++i] = '\0';
+    			break;///标识符结束
+    		}
+    	}
+    	strcpy(token.name,s);
+    	strcpy(token.type,"ident");
+    	token.value = 0;
+    }
+    else{
+    	strcpy(token.name,illegal);
+    	strcpy(token.type,illegal);
+    	token.value = -1;
+    }
     return token;
  }
 
@@ -120,7 +296,7 @@ int main(){
 	reserved[18]= "var";	reserved[19]="while";
 	reserved[20]= "write";
 
-	printf("Please enter the name of file to compile./n");//使用绝对路径
+	printf("Please enter the name of file to compile.\n");//使用绝对路径
 	scanf("%s",fname);
 	if((fin = fopen(fname,"r")==NULL){
 		printf("Open failed");
