@@ -6,7 +6,7 @@
 #include <string.h>
 #include <math.h>
 
-#define norw = 21;//number of reserved words
+#define norw 21//number of reserved words
 
 FILE* fin;
 int err = 0;//number of errors
@@ -15,7 +15,7 @@ int num_l = 0;//行数
 
 char curc;//当前字符current char
 
-char* reserved[norw];//   
+char* reserved[norw];//
 char* typeof_sym[] = {
 	"ident",    "rword",//标识符、保留字
     "illegal",  "string",//非法字符、字符串
@@ -25,11 +25,11 @@ char* typeof_sym[] = {
     "relation", "assignment",//关系运算符，赋值符号=
     "integer",	"real",		"char",//整数、浮点数、字符
     "procedure","function",//过程、函数
-    "comma",    "semicolon","period"，"colon"//','';''.':'
+    "comma",    "semicolon","period","colon"//','';''.':'
 };///symbol的类型，主要是为了第一次作业服务
 
 typedef struct sym{
-	char name[20];
+	char name[100];
 	char type[20];
 	float value;
 }symbol;//这里只记录symbol的名称和类型，若为变量或常量则以浮点数形式记录其值，字符保存的是ascii码
@@ -79,31 +79,20 @@ int search_rword(char* s){//保留字数组为字典序
 }///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
 symbol get_sym(){
-    struct symbols token;
+    symbol token;
     char c = '\0';
     int i = 0;
+    int n = 0;
     float j = 0;
     c = fgetc(fin);
-    i = c - '\0';
-    switch(i){
-    	case 40:strcpy(token.name,"(");strcpy(token.tpye,"lparen");token.value = 0;break;///左括号
-    	case 41:strcpy(token.name,")");strcpy(token.type,"rparen");token.value = 0;break;///右括号
-    	case 44:strcpy(token.name,",");strcpy(token.type,"comma");token.value = 0;break;///逗号
-    	case 46:strcpy(token.name,".");strcpy(token.type,"period");token.value = 0;break;///句点
-    	case 58:strcpy(token.name,":");strcpy(token.type,"colon");token.value = 0;break;///冒号
-    	case 59:strcpy(token.name,";");strcpy(token.type,"semicolon");token.value = 0;break;///分号
-    	case 91:strcpy(token.name,"[");strcpy(token.type,"lsqbra");token.value = 0;break;///左方括号
-    	case 93:strcpy(token.name,"]");strcpy(token.type,"rsqbra");token.value = 0;break;///右方括号
-    	default:i = 0;break;
-   	}
-    while(c=='\n'){
-    	num_t++;
-    	c = fgetc(fin);
-    }//跳过连续的换行
-    while(c==' '){
-    	c = fgetc(fin);
-    }//跳过连续的空格 能不能带上制表符不知道
-    if ((c= fgetc(fin))==EOF){
+    while((c=='\n')||(c==' ')||(c=='\t')){
+        if(c == '\n'){
+            num_l ++;
+        }
+        c = fgetc(fin);
+    }
+    n = c - '\0';
+    if (c==EOF){
     	curc = EOF;
     	strcpy(token.name,"EOF");
     	strcpy(token.type,"EOF");
@@ -137,7 +126,7 @@ symbol get_sym(){
     		token.value = 0;//关系运算符之<>
     	}
     	else{
-    		ungetc(fin);
+    		ungetc(c,fin);
     		token.name[0] = c;
     		token.name[1] = '\0';
     		token.value = (float)(c - '\0');//关系运算符之<
@@ -152,7 +141,7 @@ symbol get_sym(){
     		token.value = 0;//关系运算符之>=
     	}
     	else {
-    		ungetc(fin);
+    		ungetc(c,fin);
     		token.name[0] = '>';
     		token.name[1] = '\0';
     		token.value = (float)(c - '\0');//关系运算符之>
@@ -166,16 +155,16 @@ symbol get_sym(){
     	token.value = (float)(c - '\0');//关系运算符之=
     }
     else if(c == 34){///双引号
-    	char* s;
+    	char s[100];
     	while((c = fgetc(fin))!='"'){
-    		s[i++] = c; 
+    		s[i++] = c;
     	}
     	s[i] = '\0';//字符串，没有考虑引号不配对等问题。字符串中没有保留引号
     	strcpy(token.name,s);
     	strcpy(token.type,"string");
     	token.value = 0;
     }
-    esle if(c == 39){///单引号
+    else if(c == 39){///单引号
     	c = fgetc(fin);
     	token.name[0] = c;
     	token.name[1] = '\0';
@@ -186,12 +175,12 @@ symbol get_sym(){
     		strcpy(token.name,"illegal");
     		strcpy(token.type,"illegal");
     		token.value = 0;
-    		ungetc(fin);
-    		ungetc(fin);//不知道能不能连着两次ungetc，反正也没有这种奇葩错误把。。
+    		ungetc(c,fin);
+    		ungetc(39,fin);//不知道能不能连着两次ungetc，反正也没有这种奇葩错误把。。
     	}
     }
     else if(c>='0'&&c<='9'){///数字
-    	char* s;
+    	char s[100];
     	s[0] = c;
     	j = j + (c-'0');
     	strcpy(token.type,"integer");
@@ -208,14 +197,14 @@ symbol get_sym(){
     			s[++i] = c;
     			while(1){
     				c = fgetc(fin);
-    				if(c>='0'&&C<='9'){
+    				if(c>='0'&&c<='9'){
     					j = j + (float)pow(0.1,k)*(c-'0');
     					s[++i] = c;
     					k = k+1;
     				}
     				else{
     					s[++i] = '\0';//这里没有考虑报错的问题，只是认为数字结束
-       					ungetc(fin);
+       					ungetc(c,fin);
     					break;
     				}
     			}//浮点数
@@ -227,21 +216,23 @@ symbol get_sym(){
     			s[++i] = '\0';
     			strcpy(token.name,s);
     			token.value = j;///整数
-    			ungetc(fin);
+    			ungetc(c,fin);
     			break;
     		}
     	}
     }
     else if(c>='a'&&c<='z'){
     	int k = 0;
-    	char* s;
+    	char s[100];
     	s[0] = c;
     	while(1){
-    		if(((c=fgetc(fin))<='z')&&(c>='a')||(c>='0'&&c<='9')||(c<='Z'&&c>='A')){//标识符
+            c = fgetc(fin);
+    		if((c<='z'&&c>='a')||(c>='0'&&c<='9')||(c<='Z'&&c>='A')){//标识符
     			s[++i] = c;
     		}
     		else{
     			s[++i] = '\0';
+    			ungetc(c,fin);
     			break;///标识符结束
     		}
     	}
@@ -257,14 +248,15 @@ symbol get_sym(){
     	}
     }
     else if(c>='A'&&c<='Z'){
-    	char* s;
+    	char s[100];
     	s[0] = c;
     	while(1){
-    		if(((c=fgetc(fin))<='z')&&(c>='a')||(c>='0'&&c<='9')||(c<='Z'&&c>='A')){//标识符
+    		if((((c=fgetc(fin))<='z')&&(c>='a'))||(c>='0'&&c<='9')||(c<='Z'&&c>='A')){//标识符
     			s[++i] = c;
     		}
     		else{
     			s[++i] = '\0';
+    			ungetc(c,fin);
     			break;///标识符结束
     		}
     	}
@@ -273,17 +265,28 @@ symbol get_sym(){
     	token.value = 0;
     }
     else{
-    	strcpy(token.name,illegal);
-    	strcpy(token.type,illegal);
+    	strcpy(token.name,"illegal");
+    	strcpy(token.type,"illegal");
     	token.value = -1;
     }
+    switch(n){
+    	case 40:strcpy(token.name,"(");strcpy(token.type,"lparen");token.value = 0;break;///左括号
+    	case 41:strcpy(token.name,")");strcpy(token.type,"rparen");token.value = 0;break;///右括号
+    	case 44:strcpy(token.name,",");strcpy(token.type,"comma");token.value = 0;break;///逗号
+    	case 46:strcpy(token.name,".");strcpy(token.type,"period");token.value = 0;break;///句点
+    	case 58:strcpy(token.name,":");strcpy(token.type,"colon");token.value = 0;break;///冒号
+    	case 59:strcpy(token.name,";");strcpy(token.type,"semicolon");token.value = 0;break;///分号
+    	case 91:strcpy(token.name,"[");strcpy(token.type,"lsqbra");token.value = 0;break;///左方括号
+    	case 93:strcpy(token.name,"]");strcpy(token.type,"rsqbra");token.value = 0;break;///右方括号
+    	default:n = 0;break;
+   	}
     return token;
  }
 
 int main(){
 	char fname[100];//文件路径
-	FILE* fout;
-	symbol cur_token;
+	FILE *fout;
+	//symbol cur_token;
 	reserved[0] = "array";	reserved[1] = "begin";
 	reserved[2] = "char";	reserved[3] = "const";
 	reserved[4] = "do";		reserved[5] = "downto";
@@ -298,22 +301,25 @@ int main(){
 
 	printf("Please enter the name of file to compile.\n");//使用绝对路径
 	scanf("%s",fname);
-	if((fin = fopen(fname,"r")==NULL){
+	if((fin = fopen(fname,"r"))==NULL){
 		printf("Open failed");
 		return 1;
 	}
-	fout = fopen("the_result.txt","w");
+	//fout = fopen("the_result.txt","w");
 	while(1){
 		num_t++;
-		get_sym();
+		token0 = get_sym();
 		if(curc==EOF){
 			break;
 		}
-		fprinf(fout,"%d %s %s",num_t,token0.type,token0.name);
+		//fprintf(fout,"%d %s %s\n",num_t,token0.type,token0.name);
+		printf("%d %s %s\n",num_t,token0.type,token0.name);
 	}
-	fprintf(fout,"end of file");
+	//fprintf(fout,"%s","end of file");
+	//fprintf(fout,"%d %s %s %s\n",num_t,"123",token0.type,token0.name);
+	printf("end of file");
 	fclose(fin);
-	fclose(fout);
+	//fclose(fout);
 
 	return 0;
 }
