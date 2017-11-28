@@ -8,6 +8,8 @@
 
 #define norw 21//number of reserved words
 
+enum inst{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT}///这里add是数据栈顶指针增加a,CAL调用函数，CLL调用过程
+
 FILE* fin;
 int err = 0;//number of errors
 int num_t = 0;//读取的token数量
@@ -37,8 +39,9 @@ typedef struct sym{
 symbol token0;//当前的token
 
 void error(int a ,int b);
-int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 symbol get_sym();
+int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
+
 
 
 void error(int a,int b){
@@ -59,24 +62,9 @@ void error(int a,int b){
         default:break;
     }
     err++;
-}
+}////error
 
-int search_rword(char* s){//保留字数组为字典序
-	int high,low,mid;
-	high = norw-1;
-	low = 0;
-	mid = norw/2;
-	while(high>=low){
-		mid = (high + low)/2;
-		if(strcmp(reserved[mid],s)==0)
-			return mid;
-		if(strcmp(reserved[mid],s)>0)
-			high = mid - 1;
-		else if(strcmp(reserved[mid],s)<0)
-			low = mid + 1;
-	}
-	return -1;
-}///确认sym是否是保留字，若是则返回其标号，不是则返回-1
+
 
 symbol get_sym(){
     symbol token;
@@ -282,6 +270,23 @@ symbol get_sym(){
    	}
     return token;
  }
+
+int search_rword(char* s){//保留字数组为字典序
+    int high,low,mid;
+    high = norw-1;
+    low = 0;
+    mid = norw/2;
+    while(high>=low){
+        mid = (high + low)/2;
+        if(strcmp(reserved[mid],s)==0)
+            return mid;
+        if(strcmp(reserved[mid],s)>0)
+            high = mid - 1;
+        else if(strcmp(reserved[mid],s)<0)
+            low = mid + 1;
+    }
+    return -1;
+}///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
 int main(){
 	char fname[100];//文件路径

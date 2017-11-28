@@ -1,4 +1,4 @@
-program pl0(input,output,fin) ;  { version 1.0 oct.1989 }
+program pl0(input,output,fin) ;  { version 1.0 oct.1989 }///////p406
 { PL/0 compiler with code generation }
 const norw = 13;          { no. of reserved words }
       txmax = 100;        { length of identifier table }
