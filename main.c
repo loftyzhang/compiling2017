@@ -1,6 +1,7 @@
 //compiling2017
 //一条咸鱼的自我救赎
 //标识符长度等各种长度的越界都没有考虑，测试过程中需要注意
+//这个作业额没那么高级，我也不打算解决参相关的错误了。
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,7 @@ FILE* fin;
 int err = 0;//number of errors
 int num_t = 0;//读取的token数量
 int num_l = 0;//行数
+int num_i = 0;//符号表项数
 
 char curc;//当前字符current char
 
@@ -50,7 +52,6 @@ void statement();
 
 symbol get_sym();
 int position(symbol sym);
-
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
 
@@ -81,33 +82,133 @@ code listcode(){
 
 void statement(symbol sym){
     int i = 0;
+    symbol token;
     if(strcmp(sym.type,"ident")==0){
-
+        /////正常这里需要进行表达式处理，但是这次作业就读就行了。。。
+        while(1){
+            token = get_sym;
+            if(strcmp(token.type,"semicolon")==0){///赋值语句肯定是分号结尾没跑了
+                printf("this is a assignment statement!\n");
+                return ;
+            }////这里还需要判断是否为函数或过程的调用语句
+        }
+    }
+    else if(strcmp(sym.name,"const")==0){
+        token = get_sym();
+        const_dec(token);
+        printf("this is a const declaration statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"var")==0){
+        token = get_sym();
+        var_dec(token);
+        printf("this is a var declaration statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"procedure")==0){
+        token = get_sym;
+        pro_dec(token);
+        printf("this is a procedure declaration statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"function")==0){
+        token = get_sym();
+        func_dec(token);
+        printf("this is a function declaration statement!\n");
+        return;
+    }/////根据getsym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
+    else if(strcmp(sym.type,"procedure")==0){
+        token = sym;
+        pro_call(token);
+        printf("this is a procedure call statement!\n");
+        return;
+    }
+    else if(strcmp(sym.type,"function")==0){
+        token = sym;
+        func_call(token);
+        printf("this is a function call statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"read")==0){
+        reading();
+        printf("this is a read statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"write")==0){
+        writing();
+        printf("this is a read statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"if")==0){
+        if_state();
+        printf("this is a if statement!\n");///应该顺便解决else和then分支
+        return;
+    }
+    else if(strcmp(sym.name,"while")==0){
+        while_state();
+        printf("this is a while statement!\n");
+        return;
+    }
+    else if(strcmp(sym.name,"for")==0){
+        for_state();
+        printf("this is a for statement!\n");
+        return;
     }
 }/* read  
     write
-    const declaration
-    variable declaration
-    function declaration
-    procedure declaration
+    const_dec
+    var_dec
+    func_dec
+    pro_dec
+    func_call
+    pro_call
     if
     for
     while
 */
-/* 预计若为标识符，则根据是否已经登记入表判断是声明还是赋值
+/* 预计若为标识符，则是赋值,因为不支持隐式声明，相应的应给出错误类型
     若为句型标识则判断为对应句型，
     begin和end中递归调用此函数
     需要提前解决标识符登记问题，完善查找标识符的功能。
+    声明语句需要修改标识符的类型，从iden改为函数、过程、常量、变量等
 */
 
-void read_statement(){
+void const_dec(symbol sym){
+
+}
+void var_dec(symbol sym){
+
+}
+void pro_dec(symbol sym){
+
+}
+void func_dec(symbol sym){
+
+}
+void pro_call(symbol sym){
+
+}
+void func_call(symbol sym){
+
+}
+void reading(){
+
+}
+void writing(){
+
+}
+void if_state(){
+
+}
+void for_state(){
+
+}
+void while_state(){
 
 }
 
-void write_statement(){
 
-}
-
+/////////////////////////////////还应该有表达式三兄弟expression、term和factor
 
 
 symbol get_sym(){
@@ -313,6 +414,16 @@ symbol get_sym(){
     	default:n = 0;break;
    	}
     return token;
+ }
+
+ int position(symbol sym){//在符号表中寻找当前标识符
+    int i = 0;
+    for(i = 0;i<num_i;i++){
+        if(strcmp(sym.name,symbols[i].name)==0&&strcmp(sym.type,symbols[i].type)==0){
+            return i;
+        }
+    }
+    return 0;
  }
 
 int search_rword(char* s){//保留字数组为字典序
