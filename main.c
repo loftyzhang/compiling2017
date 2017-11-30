@@ -8,7 +8,11 @@
 
 #define norw 21//number of reserved words
 
-enum inst{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT}///这里add是数据栈顶指针增加a,CAL调用函数，CLL调用过程
+enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT}///这里add是数据栈顶指针增加a,CAL调用函数，CLL调用过程
+
+code codes[1000]={RED};
+
+
 
 FILE* fin;
 int err = 0;//number of errors
@@ -35,11 +39,18 @@ typedef struct sym{
 	char type[20];
 	float value;
 }symbol;//这里只记录symbol的名称和类型，若为变量或常量则以浮点数形式记录其值，字符保存的是ascii码
+//对于function 和procedure,value 保存其入口
 
 symbol token0;//当前的token
+symbol symbols[100];
 
 void error(int a ,int b);
+code listcode();
+void statement();
+
 symbol get_sym();
+int position(symbol sym);
+
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
 
@@ -63,6 +74,39 @@ void error(int a,int b){
     }
     err++;
 }////error
+
+code listcode(){
+
+}
+
+void statement(symbol sym){
+    int i = 0;
+    if(strcmp(sym.type,"ident")==0){
+
+    }
+}/* read  
+    write
+    const declaration
+    variable declaration
+    function declaration
+    procedure declaration
+    if
+    for
+    while
+*/
+/* 预计若为标识符，则根据是否已经登记入表判断是声明还是赋值
+    若为句型标识则判断为对应句型，
+    begin和end中递归调用此函数
+    需要提前解决标识符登记问题，完善查找标识符的功能。
+*/
+
+void read_statement(){
+
+}
+
+void write_statement(){
+
+}
 
 
 
