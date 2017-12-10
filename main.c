@@ -5,6 +5,10 @@
 //一条咸鱼的自我救赎
 //标识符长度等各种长度的越界都没有考虑，测试过程中需要注意
 //这个作业额没那么高级，我也不打算解决参相关的错误了。
+/*目前为止的思路如下：在正常进行语法分析的基础上，完成目标代码的生成，在生成目标码的过程中，
+通过以某一函数或过程在符号表中的起始位置为起点，结合偏移量实现其中参数和其他相关量的查找，
+符号表查找部分通过所得结果大于所属函数或过程的下标来保证查找的正确性，并根据符号表获得其
+*/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +27,7 @@ int num_l = 0;//行数
 int num_i = 0;//符号表项数
 int num_b = 0;///begin和end对数
 int addr = 0;///虚拟地址空间中的地址
+int addr0 = 0;///基地址，主要用于辅助position函数
 int depth = 0;///调用层次数
 int top = 0;///运行栈栈顶
 int bp = 0;///当前分程序数据区的起始地址
@@ -110,49 +115,49 @@ int statement(symbol sym){
     if(strcmp(sym.name,"const")==0){
         token = get_sym();
         const_dec(token);
-        printf("this is a const declaration statement!\n");
+        //printf("this is a const declaration statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"var")==0){
         token = get_sym();
         var_dec(token);
-        printf("this is a var declaration statement!\n");
+        //printf("this is a var declaration statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"procedure")==0){
         token = get_sym();
-        printf("this is a procedure declaration statement!\n");
+        //printf("this is a procedure declaration statement!\n");
         pro_dec(token);
         return 0;
     }
     else if(strcmp(sym.name,"function")==0){
         token = get_sym();
-        printf("this is a function declaration statement!\n");
+        //printf("this is a function declaration statement!\n");
         func_dec(token);
         return 0;
     }/////根据getsym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
     else if(strcmp(sym.name,"read")==0){
         reading();
-        printf("this is a read statement!\n");
+        //printf("this is a read statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"write")==0){
         writing();
-        printf("this is a write statement!\n");
+        //printf("this is a write statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"if")==0){
-        printf("this is a if statement!\n");///应该顺便解决else和then分支
+        //printf("this is a if statement!\n");///应该顺便解决else和then分支
         if_state();
         return 0;
     }
     else if(strcmp(sym.name,"do")==0){
-        printf("this is a while statement!\n");
+        //printf("this is a while statement!\n");
         while_state();
         return 0;
     }
     else if(strcmp(sym.name,"for")==0){
-        printf("this is a for statement!\n");
+        //printf("this is a for statement!\n");
         for_state();
         return 0;
     }
@@ -184,13 +189,13 @@ int statement(symbol sym){
         if(1!=-1){
             if(strcmp(syms[i].type,"procedure")==0){
                 token = sym;
-                printf("this is a procedure call statement!\n");
+                //printf("this is a procedure call statement!\n");
                 pro_call(token);
                 return 0;
             }
             else if(strcmp(syms[i].type,"function")==0){
                 token = sym;
-                printf("this is a function call statement!\n");
+                //printf("this is a function call statement!\n");
                 func_call(token);
                 return 0;
             }//若为函数或过程则为调用语句，否则是赋值语句
@@ -198,7 +203,7 @@ int statement(symbol sym){
         while(1){
             token = get_sym();
             if(strcmp(token.type,"semicolon")==0){///赋值语句肯定是分号结尾没跑了
-                printf("this is a assignment statement!\n");
+                //printf("this is a assignment statement!\n");
                 return 0;
             }////这里还需要判断是否为函数或过程的调用语句
         }
@@ -238,16 +243,26 @@ void const_dec(symbol sym){
     syms[num_i] = token;
     num_i = num_i + 1;///登入符号表
     get_sym();//分号
-}
+}///const_Dec
 void var_dec(symbol sym){
     symbol token;
     symbol token1;
     int size = 1;
     int i = 0;
     strcpy(token.name,sym.name);
+    token.level = depth;
+    token.addr = addr;
+    strcpy(token.type,"unknown");////这里暂时不清楚变量类型，为便于处理多个变量的声明，先放一个在这
+    syms[num_i++] = token;
+    i = 1;
     token1 = get_sym();//冒号或者逗号，可能是一次对多个变量进行声明
     while(token1.name[0]==44){//逗号
         token1 = get_sym();//下一个变量
+        token.level = depth;
+        token.addr = addr;
+        strcpy(token.type,"unknown");
+        syms[num_i++] = token;
+        i++;
         token1 = get_sym();//逗号或冒号
     }
     token1 = get_sym();//数据类型
@@ -263,23 +278,24 @@ void var_dec(symbol sym){
         get_sym();//]
         get_sym();//of
         token1 = get_sym();////这里可能有很多的错误类型，都归类与error11
+        //这里只记录了数组的数据类型，没有注明这是一个数组
+
+    }
+    while(i>=1){
+        strcpy(syms[num_i-i].type,token1.name);
+        for(int j = 0;j<size;j++){
+            vm[addr++] = 0;
+        }///初始化
+        i--;//补入数据类型
     }
 
-    strcpy(token.type,token1.name);///数据类型
-    token.level = depth;
-    token.addr = addr;
-    for(i=0;i<size;i++){
-        vm[addr] = 0;
-        addr ++;
-    }///初始化
-    syms[num_i] = token;
-    num_i = num_i + 1;//登入符号表
     get_sym();//分号
-}
+}////var_dec
 void pro_dec(symbol sym){
     symbol token;
     symbol token1;
     int n = 10;
+    addr0 = addr;
     token = sym;
     strcpy(token.type,"procedure");//这里得到了过程名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
@@ -311,10 +327,12 @@ void pro_dec(symbol sym){
         }
     }//对分程序部分进行分析
     depth = token.level;//把这个层数复位
-}
+    addr0 = addr;////过程段结束，基地址复位
+}///pro_dec
 void func_dec(symbol sym){
     symbol token;
     symbol token1;
+    addr0 = addr;
     int n = 10;
     token = sym;
     strcpy(token.type,"function");//这里得到了函数名
@@ -346,36 +364,80 @@ void func_dec(symbol sym){
         }
     }//对分程序部分进行分析
     depth = token.level;//把这个层数复位
+    addr0 = addr;//函数段结束，基地址复位
 }
 void pro_call(symbol sym){
     symbol token;
+    int i = 0;
+    i = position(0,sym);////这里暂时认为过程不会重名，且过程调用没有层次限制
+    while(strcpy(vm[i].type,"procedure")!=0){
+        i = position(i,sym);///找到过程位置，同时找到入口（由value保存）和内存空间中的起始位置（由addr确定）
+    }
     token = get_sym();
-    while(token.name[0]!=59){
+    while(token.name[0]!=59){//分号
         token = get_sym();
     }////这里暂时这样处理
 
-}
+}///func_dec
 void func_call(symbol sym){
     symbol token;
+    int i = 0;
+    i = position(0.sym);
+    while(strcpy(vm[i].type,"function")!=0){
+        i = position(i,sym);////找到函数起始位置，获得入口和内存中起始位置的信息
+    }
     token = get_sym();
     while(token.name[0]!=59){
         token = get_sym();
     }////这里暂时这样处理
-}
-void reading(){
+}////func+call
+void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
     symbol token;
-    token = get_sym();
-    while(token.name[0]!=59){
+    symbol token1;
+    int i = 0;
+    int j = 0;
+    token = get_sym();///肯定是括号了
+    while(token.name[0]!=59){////分号
         token = get_sym();
+        i = position(addr0,token);////定位
+        token = get_sym();
+        if(strcmp(token.name,"[")){//[,表明v是一个数组元素
+            token1 = get_sym();
+            j = (int)token.value;
+            token = get_sym();///]
+            token = get_sym();////这个地方比较混乱，但是没啥问题
+        }///当标识符后为逗号或括号时直接进入下一次循环即可。
     }////这里暂时这样处理
-}
+//需要找到每个 元素的位置。
+}////reading
 void writing(){
     symbol token;
+    int i = 0;
+    token = get_sym();///括号无误
     token = get_sym();
-    while(token.name[0]!=59){
+    if(strcmp(token.type,"string")==0){
+        ////此处应该有代码
+        token = get_sym();///字符串后的逗号或括号
+        if(strcmp(token.type,"colon")==0){
+            expression();/////表达式处理不应该超出表达式
+            token = get_sym();///括号
+        }
+    }
+    else{
+        expression();///不是字符串就是表达式，当然需要判断是否为空
+        token = get_sym();//应该是括号
+    }
+    if(strcmp(token.type,"rparen")==0){///表明是表达式
         token = get_sym();
-    }////这里暂时这样处理
-}
+        return;
+    }
+    else{
+        error(num_l,15);
+        while(strcmp(token.type,"semicolon")!=0){
+            token = get_sym();
+        }
+    }
+}////writing
 void if_state(){
     symbol token;
     int n = num_b;//记录当前begin-end的对数，用于判断语句结尾
@@ -509,6 +571,20 @@ symbol get_sym(){
         strcpy(token.type,"relation");
         token.value = (float)(c - '\0');//关系运算符之=
     }
+    else if(c == 58){
+        c = fgetc(fin);
+        if(c == '='){
+            strcpy(token.name,":=");
+            strcpy(token.type,"assignment");//赋值符号
+            token.value = 0;
+        }
+        else{
+            ungetc(c,fin);
+            strcpy(token.name,":");
+            strcpy(token.type,"colon");//冒号
+            token.value = 0;
+        }
+    }
     else if(c == 34){///双引号
         char s[100];
         while((c = fgetc(fin))!='"'){
@@ -629,7 +705,7 @@ symbol get_sym(){
         case 41:strcpy(token.name,")");strcpy(token.type,"rparen");token.value = 0;break;///右括号
         case 44:strcpy(token.name,",");strcpy(token.type,"comma");token.value = 0;break;///逗号
         case 46:strcpy(token.name,".");strcpy(token.type,"period");token.value = 0;break;///句点
-        case 58:strcpy(token.name,":");strcpy(token.type,"colon");token.value = 0;break;///冒号
+       // case 58:strcpy(token.name,":");strcpy(token.type,"colon");token.value = 0;break;///冒号
         case 59:strcpy(token.name,";");strcpy(token.type,"semicolon");token.value = 0;break;///分号
         case 91:strcpy(token.name,"[");strcpy(token.type,"lsqbra");token.value = 0;break;///左方括号
         case 93:strcpy(token.name,"]");strcpy(token.type,"rsqbra");token.value = 0;break;///右方括号
