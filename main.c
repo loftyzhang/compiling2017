@@ -53,7 +53,8 @@ char* typeof_sym[] = {
 
 typedef struct sym{
     char name[100];///名称，也可以保存一个完整的字符串
-    char type[20];//类型
+    char type[20];//类型int char string float 
+    char kind[20];//array func pro const var///这个 地方是为了这类特别的元素准备的，其他统称normal，这一位置只需在声明语句中初始化，
     float value;//值
     int level;///声明层次
     int addr;///这里对过程和函数是起始地址，对其内部声明的量是相对地址。
@@ -71,13 +72,16 @@ void const_dec(symbol sym);
 void var_dec(symbol sym);
 void pro_dec(symbol sym);
 void func_dec(symbol sym);
-void pro_call(symbol sym);
-void func_call(symbol sym);
+void pro_call(int n);
+void func_call(int n);
 void reading();
 void writing();
 void if_state();
 void for_state();
 void while_state();
+void expression();//表达式
+void term();//项
+void factor();//因子
 symbol get_sym();
 int position(int b,symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
@@ -186,17 +190,17 @@ int statement(symbol sym){
     else if(strcmp(sym.type,"ident")==0){
         /////正常这里需要进行表达式处理，但是这次作业就读就行了。。。
         i = position(0,sym);
-        if(1!=-1){
-            if(strcmp(syms[i].type,"procedure")==0){
-                token = sym;
+        if(i!=-1){
+            if(strcmp(syms[i].kind,"procedure")==0){
+                //token = sym;
                 //printf("this is a procedure call statement!\n");
-                pro_call(token);
+                pro_call(i);
                 return 0;
             }
-            else if(strcmp(syms[i].type,"function")==0){
-                token = sym;
+            else if(strcmp(syms[i].kind,"function")==0){
+                //token = sym;
                 //printf("this is a function call statement!\n");
-                func_call(token);
+                func_call(i);
                 return 0;
             }//若为函数或过程则为调用语句，否则是赋值语句
         }
@@ -235,6 +239,7 @@ void const_dec(symbol sym){
     get_sym();///等号
     token1 = get_sym();//常量的值
     strcpy(token.type,token1.type);
+    strcpy(token.kind,"const");
     token.value = token1.value;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
     token.level = depth;///层次为当前层
     token.addr = addr;
@@ -258,14 +263,15 @@ void var_dec(symbol sym){
     token1 = get_sym();//冒号或者逗号，可能是一次对多个变量进行声明
     while(token1.name[0]==44){//逗号
         token1 = get_sym();//下一个变量
-        token.level = depth;
-        token.addr = addr;
-        strcpy(token.type,"unknown");
-        syms[num_i++] = token;
+        token1.level = depth;
+        token1.addr = addr;
+        strcpy(token1.type,"unknown");
+        syms[num_i++] = token1;
         i++;
         token1 = get_sym();//逗号或冒号
     }
     token1 = get_sym();//数据类型
+    strcpy(token1.kind,"var");
     if(strcmp(token1.name,"array")==0){
         get_sym();///[
         token1 = get_sym();
@@ -277,12 +283,14 @@ void var_dec(symbol sym){
         }
         get_sym();//]
         get_sym();//of
-        token1 = get_sym();////这里可能有很多的错误类型，都归类与error11
+        token1 = get_sym();////这里可能有很多的错误类型，都归类与error11 
+        strcpy(token1.kind,"array");
         //这里只记录了数组的数据类型，没有注明这是一个数组
 
     }
     while(i>=1){
         strcpy(syms[num_i-i].type,token1.name);
+        strcpy(syms[num_i-i].kind,token1.kind);
         for(int j = 0;j<size;j++){
             vm[addr++] = 0;
         }///初始化
@@ -298,6 +306,7 @@ void pro_dec(symbol sym){
     addr0 = addr;
     token = sym;
     strcpy(token.type,"procedure");//这里得到了过程名
+    strcpy(token.kind,"procedure");///过程没有返回值，故type和kind相同
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
     token.level = depth;
     token.addr = addr;///这里也应该是函数在虚拟内存空间的起始位置，先保存参数再保存过程内生成的量
@@ -334,17 +343,19 @@ void func_dec(symbol sym){
     symbol token1;
     addr0 = addr;
     int n = 10;
+    int m = 0;
     token = sym;
-    strcpy(token.type,"function");//这里得到了函数名
+    strcpy(token.kind,"function");//这里得到了函数名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
     token.level = depth;
     token.addr = addr;///这里也应该是函数在虚拟内存空间的起始位置，先保存参数再保存过程内生成的量
     depth++;
     addr++;
+    m = num_i;
     syms[num_i++] = token;//将过程登记入符号表
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
-        while(token1.name[0]!=59){//分号59
+        while(token1.name[0]!=41){//右括号41
             token1 = get_sym();
             if(strcmp(token1.name,"var")==0){
                 token1 = get_sym();
@@ -354,8 +365,12 @@ void func_dec(symbol sym){
             else{
                 error(num_l,14);
             }
+
         }
     }///参数表结束
+    token = get_sym();//冒号
+    token = get_sym();//函数的返回值类型
+    strcpy(vm[m].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
     while(1){
         token1 = get_sym();
         n = statement(token1);
@@ -365,27 +380,21 @@ void func_dec(symbol sym){
     }//对分程序部分进行分析
     depth = token.level;//把这个层数复位
     addr0 = addr;//函数段结束，基地址复位
-}
-void pro_call(symbol sym){
+}//func_dec
+void pro_call(int n){
     symbol token;
     int i = 0;
-    i = position(0,sym);////这里暂时认为过程不会重名，且过程调用没有层次限制
-    while(strcpy(vm[i].type,"procedure")!=0){
-        i = position(i,sym);///找到过程位置，同时找到入口（由value保存）和内存空间中的起始位置（由addr确定）
-    }
+    i = n;
     token = get_sym();
     while(token.name[0]!=59){//分号
         token = get_sym();
     }////这里暂时这样处理
 
-}///func_dec
-void func_call(symbol sym){
+}
+void func_call(int n){
     symbol token;
     int i = 0;
-    i = position(0.sym);
-    while(strcpy(vm[i].type,"function")!=0){
-        i = position(i,sym);////找到函数起始位置，获得入口和内存中起始位置的信息
-    }
+    i = n;
     token = get_sym();
     while(token.name[0]!=59){
         token = get_sym();
