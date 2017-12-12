@@ -32,7 +32,7 @@ begin
 	write("please input five numbers/n");
 	read(num[0],num[1],num[2],num[3],num[4]);
 	sorting(num);
-	average = getaverage;
+	average = getaverage(num);
 	write("here are the results:/n");
 	do
 		begin
