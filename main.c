@@ -26,6 +26,7 @@ int num_t = 0;//读取的token数量
 int num_l = 0;//行数
 int num_i = 0;//符号表项数
 int num_b = 0;///begin和end对数
+int num_p = 0;///小括号的对数
 int addr = 0;///虚拟地址空间中的地址
 int addr0 = 0;///基地址，主要用于辅助position函数
 int depth = 0;///调用层次数
@@ -62,6 +63,13 @@ typedef struct sym{
 //对于function 和procedure,value 保存其入口地址
 
 symbol token0;//当前的token
+symbol zero;
+strcpy(zero.name,"0");
+strcpy(zero.type,"float");
+strcpy(zero.kind,"const");
+zero.value = 0;
+zero.level = 0;
+zero.addr = -1;///初始化一个常量零用于解决表达式前可能存在的运算符的问题、
 symbol syms[100];///符号表
 
 
@@ -79,9 +87,7 @@ void writing();
 void if_state();
 void for_state();
 void while_state();
-void expression();//表达式
-void term();//项
-void factor();//因子
+void expression();//表达式，这里是做一个中缀变后缀的转换，然后计算后缀表达式。用于保存后缀表达式的栈不必是全局变量。
 symbol get_sym();
 int position(int b,symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
@@ -422,30 +428,30 @@ void reading(){///基于基地址进行变量的查找和赋值，变量名可�
 void writing(){
     symbol token;
     int i = 0;
+    char c '\0';
     token = get_sym();///括号无误
-    token = get_sym();
-    if(strcmp(token.type,"string")==0){
-        ////此处应该有代码
-        token = get_sym();///字符串后的逗号或括号
+    c = fgetc(fin);
+    if(c==34){
+        ungetc(c,fin);
+        token = get_sym();//字符串
+        token = get_sym();
         if(strcmp(token.type,"colon")==0){
             expression();/////表达式处理不应该超出表达式
             token = get_sym();///括号
         }
     }
-    else{
-        expression();///不是字符串就是表达式，当然需要判断是否为空
+    else if((c>'0'&&c<'9')||(c>'a'&&c<'z')||(c>'A'&&c<'Z')){//若c是字母或数字则是表达式的开头
+        ungetc(c,fin);
+        expression();///不是字符串就是表达式
         token = get_sym();//应该是括号
     }
-    if(strcmp(token.type,"rparen")==0){///表明是表达式
-        token = get_sym();
-        return;
-    }
-    else{
-        error(num_l,15);
-        while(strcmp(token.type,"semicolon")!=0){
-            token = get_sym();
+    else{//非法
+        error(num_l,6);
+        while(c!=59){
+            c= fgetc(fin);
         }
     }
+    token = get_sym();///语句结尾是分号
 }////writing
 void if_state(){
     symbol token;
@@ -500,8 +506,39 @@ void while_state(){////以do起始
     }
 }
 
+void expression(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
+    symbol token,token1;    //这个问题里最重要的还是找出表达式的边界
+    char ops[20];//临时保存运算符
+    symbol suf[100];///suffix expression 保存作为转换结果的后缀表达式
+    char c = '\0';
+    int i = 0;
+    int j = 0;
+    //int op = 1;///用于正负的标识，注意测试样例中不会出现多个连续的正负号
+    int lp = 0;//运算符栈中左括号的数量，用于判断表达式结尾。
+    c= fegtc(fin);//用于判断
+    if(c == '-'){
+        suf[i++] = zero;
+        ops[j++] = c;//若为负号则添加一个零和一个减法
+        token = get_sym();
+    }
+    else if(c == '+'){
+        token = get_sym();//正号忽略
+    }
+    else{
+        ungetc(c,fin);//若无前导符号则退回，读取第一个标识符
+        token = get_sym();
+    }
+    while(1){
+        if(strcpy(token.type,"real")==0||(strcpy(token.type,"integer")==0)){//若为数字，即若为常量，直接入栈
+            suf[i++] = token;
+        }
+        else if(strcpy(token.type,"ident")==0){//若为标识符，则需判断是常量、变量、数组，或是函数调用
+            
 
-/////////////////////////////////还应该有表达式三兄弟expression、term和factor
+        }
+    }
+
+}///这还需要注意的是，对于数组下标位置上的表达式，可以使用递归的方法分析，对于小括号则不应该递归调用此函数
 
 
 symbol get_sym(){
