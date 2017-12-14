@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <stdlib.h>
-
 //compiling2017
 //一条咸鱼的自我救赎
 //标识符长度等各种长度的越界都没有考虑，测试过程中需要注意
@@ -22,7 +19,19 @@
 #define norw 21//number of reserved words
 FILE* fin;
 
-enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT};///这里add是数据栈顶指针增加a,CAL调用函数，CLL调用过程
+enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT};
+/*lit 取常量到栈顶
+  opr 做运算
+  lod 取变量到栈顶
+  sto 将栈顶存入变量
+  cal 函数调用
+  cll 过程调用
+  add 栈顶指针自增a
+  jmp 无条件跳转
+  jpc 条件跳转
+  red 读并保存
+  wrt 输出栈顶
+*/
 enum code codes[1000]={RED};//pcode指令的指令部分
 
 int operand[1000][2]={{0},{0}};//pcode指令的操作数部分
@@ -60,7 +69,7 @@ char* typeof_sym[] = {
 
 typedef struct sym{
     char name[100];///名称，也可以保存一个完整的字符串
-    char type[20];//类型int char string float 
+    char type[20];//类型int char string float
     char kind[20];//array func pro const var///这个 地方是为了这类特别的元素准备的，其他统称normal，这一位置只需在声明语句中初始化，
     float value;//值
     int level;///声明层次
@@ -70,12 +79,6 @@ typedef struct sym{
 
 symbol token0;//当前的token
 symbol zero;
-strcpy(zero.name,"0");
-strcpy(zero.type,"float");
-strcpy(zero.kind,"const");
-zero.value = 0;
-zero.level = 0;
-zero.addr = -1;///初始化一个常量零用于解决表达式前可能存在的运算符的问题、
 symbol syms[100];///符号表
 symbol suf[100];///suffix expression 保存作为转换结果的后缀表达式
 
@@ -103,21 +106,21 @@ int search_rword(char* s);///确认sym是否是保留字，若是则返回其标
 
 void error(int a,int b){
     switch(b){
-        case 1:printf("error in line %d,too long identifier",a);break;
-        case 2:printf("error in line %d,illegal real input",a);break;
-        case 3:printf("error in line %d,incompleted operator",a);break;
-        case 4:printf("error in line %d,unpaired quotation marks",a);break;
-        case 5:printf("error in line %d,illegal string",a);break;
-        case 6:printf("error in line %d,illegal expression",a);break;
-        case 7:printf("error in line %d,illegal step size",a);break;
-        case 8:printf("error in line %d,illegal conditions",a);break;
-        case 9:printf("error in line %d,illegal function call",a);break;
-        case 10:printf("error in line %d,illegal variable declaration",a);break;
-        case 11:printf("error in line %d,illegal array declaration",a);break;
-        case 12:printf("error in line %d,illegal const declaration",a);break;
-        case 13:printf("error in line %d,illegal function declaration",a);break;
-        case 14:printf("error in line %d,illegal proccedure declaration",a);break;
-        case 15:printf("error in line %d,unpaired parens",a);break;
+        case 1:printf("error in line %d,too long identifier\n",a);break;
+        case 2:printf("error in line %d,illegal real input\n",a);break;
+        case 3:printf("error in line %d,incompleted operator\n",a);break;
+        case 4:printf("error in line %d,unpaired quotation marks\n",a);break;
+        case 5:printf("error in line %d,illegal string\n",a);break;
+        case 6:printf("error in line %d,illegal expression\n",a);break;
+        case 7:printf("error in line %d,illegal step size\n",a);break;
+        case 8:printf("error in line %d,illegal conditions\n",a);break;
+        case 9:printf("error in line %d,illegal function call\n",a);break;
+        case 10:printf("error in line %d,illegal variable declaration\n",a);break;
+        case 11:printf("error in line %d,illegal array declaration\n",a);break;
+        case 12:printf("error in line %d,illegal const declaration\n",a);break;
+        case 13:printf("error in line %d,illegal function declaration\n",a);break;
+        case 14:printf("error in line %d,illegal proccedure declaration\n",a);break;
+        case 15:printf("error in line %d,unpaired parens\n",a);break;
         default:break;
     }
     err++;
@@ -133,49 +136,49 @@ int statement(symbol sym){
     if(strcmp(sym.name,"const")==0){
         token = get_sym();
         const_dec(token);
-        //printf("this is a const declaration statement!\n");
+        printf("this is a const declaration statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"var")==0){
         token = get_sym();
         var_dec(token);
-        //printf("this is a var declaration statement!\n");
+        printf("this is a var declaration statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"procedure")==0){
         token = get_sym();
-        //printf("this is a procedure declaration statement!\n");
+        printf("this is a procedure declaration statement!\n");
         pro_dec(token);
         return 0;
     }
     else if(strcmp(sym.name,"function")==0){
         token = get_sym();
-        //printf("this is a function declaration statement!\n");
+        printf("this is a function declaration statement!\n");
         func_dec(token);
         return 0;
     }/////根据getsym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
     else if(strcmp(sym.name,"read")==0){
         reading();
-        //printf("this is a read statement!\n");
+        printf("this is a read statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"write")==0){
         writing();
-        //printf("this is a write statement!\n");
+        printf("this is a write statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"if")==0){
-        //printf("this is a if statement!\n");///应该顺便解决else和then分支
+        printf("this is a if statement!\n");///应该顺便解决else和then分支
         if_state();
         return 0;
     }
     else if(strcmp(sym.name,"do")==0){
-        //printf("this is a while statement!\n");
+        printf("this is a while statement!\n");
         while_state();
         return 0;
     }
     else if(strcmp(sym.name,"for")==0){
-        //printf("this is a for statement!\n");
+        printf("this is a for statement!\n");
         for_state();
         return 0;
     }
@@ -202,18 +205,27 @@ int statement(symbol sym){
         }
     }
     else if(strcmp(sym.type,"ident")==0){
-        /////正常这里需要进行表达式处理，但是这次作业就读就行了。。。
+        ///正常这里需要进行表达式处理，但是这次作业就读就行了。。。
         i = position(0,sym);
         if(i!=-1){
             if(strcmp(syms[i].kind,"procedure")==0){
-                //token = sym;
-                //printf("this is a procedure call statement!\n");
+                printf("this is a procedure call statement!\n");
                 pro_call(i);
                 return 0;
             }
             else if(strcmp(syms[i].kind,"function")==0){
-                //token = sym;
-                //printf("this is a function call statement!\n");
+                token = get_sym();
+                if(strcmp(token.type,"assignment")==0){
+                   while(1){
+                    token = get_sym();
+                    if(strcmp(token.type,"semicolon")==0){///赋值语句肯定是分号结尾没跑了
+                            printf("this is a assignment statement!\n");
+                            return 0;
+                        }////这里还需要判断是否为函数或过程的调用语句
+                    }
+                }
+                ungetc(token.name[0],fin);///若不是赋值语句则是函数调用，将括号返回字符流
+                printf("this is a function call statement!\n");
                 func_call(i);
                 return 0;
             }//若为函数或过程则为调用语句，否则是赋值语句
@@ -221,7 +233,7 @@ int statement(symbol sym){
         while(1){
             token = get_sym();
             if(strcmp(token.type,"semicolon")==0){///赋值语句肯定是分号结尾没跑了
-                //printf("this is a assignment statement!\n");
+                printf("this is a assignment statement!\n");
                 return 0;
             }////这里还需要判断是否为函数或过程的调用语句
         }
@@ -262,12 +274,13 @@ void const_dec(symbol sym){
     syms[num_i] = token;
     num_i = num_i + 1;///登入符号表
     get_sym();//分号
-}///const_Dec
+}///const_Dec常量的值直接写入内存，故不会有相应指令。。。。
 void var_dec(symbol sym){
     symbol token;
     symbol token1;
     int size = 1;
     int i = 0;
+    int j = 0;
     strcpy(token.name,sym.name);
     token.level = depth;
     token.addr = addr;
@@ -297,7 +310,7 @@ void var_dec(symbol sym){
         }
         get_sym();//]
         get_sym();//of
-        token1 = get_sym();////这里可能有很多的错误类型，都归类与error11 
+        token1 = get_sym();////这里可能有很多的错误类型，都归类与error11
         strcpy(token1.kind,"array");
         //这里只记录了数组的数据类型，没有注明这是一个数组
 
@@ -305,14 +318,15 @@ void var_dec(symbol sym){
     while(i>=1){
         strcpy(syms[num_i-i].type,token1.name);
         strcpy(syms[num_i-i].kind,token1.kind);
-        for(int j = 0;j<size;j++){
+        for(j = 0;j<size;j++){
             vm[addr++] = 0;
         }///初始化
         i--;//补入数据类型
     }
 
     get_sym();//分号
-}////var_dec
+}///var_dec关于变量声明，相应的动作是在运行栈中预留空间，
+ ///仅在赋值语句等需要保存的情形下才将变量写回内存，并在适当时候删除其在运行栈中的数据区
 void pro_dec(symbol sym){
     symbol token;
     symbol token1;
@@ -333,8 +347,8 @@ void pro_dec(symbol sym){
             token1 = get_sym();
             if(strcmp(token1.name,"var")==0){
                 token1 = get_sym();
-                var_dec(token1);
-                token1 = get_sym();//逗号或者是右括号
+                var_dec(token1);///解决了整个参数表
+                token1 = get_sym();//分号
             }
             else{
                 error(num_l,14);
@@ -369,22 +383,21 @@ void func_dec(symbol sym){
     syms[num_i++] = token;//将过程登记入符号表
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
-        while(token1.name[0]!=41){//右括号41
+        while(token1.name[0]!=58){//冒号58
             token1 = get_sym();
             if(strcmp(token1.name,"var")==0){
                 token1 = get_sym();
-                var_dec(token1);
-                token1 = get_sym();//逗号或者是右括号
+                var_dec(token1);///解决整个参数表
+                token1 = get_sym();//冒号
             }
             else{
-                error(num_l,14);
+                printf("%c",&token1.name[0]);
+                error(num_l,13);
             }
-
         }
     }///参数表结束
-    token = get_sym();//冒号
     token = get_sym();//函数的返回值类型
-    strcpy(vm[m].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
+    strcpy(syms[m].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
     while(1){
         token1 = get_sym();
         n = statement(token1);
@@ -440,8 +453,8 @@ void reading(){///基于基地址进行变量的查找和赋值，变量名可�
 }////reading
 void writing(){
     symbol token;
-    int i = 0;
-    char c '\0';
+    //int i = 0;
+    char c='\0';
     token = get_sym();///括号无误
     c = fgetc(fin);
     if(c==34){
@@ -498,7 +511,7 @@ void for_state(){
     while(strcmp(token.name,"do")!=0){
         token = get_sym();///有关步长部分
     }
-     do{
+    do{
         token = get_sym();
         statement(token);
     }
@@ -522,12 +535,13 @@ void while_state(){////以do起始
 void expression(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
     symbol token,token1;    //这个问题里最重要的还是找出表达式的边界
     symbol ops[20];
-    int j;
+    int i = 0;
+    int j = 0;
     char c = '\0';
     int ad = 0;
     //int op = 1;///用于正负的标识，注意测试样例中不会出现多个连续的正负号
     int lp = 0;//运算符栈中左括号的数量，用于判断表达式结尾。
-    c= fegtc(fin);//用于判断
+    c = fgetc(fin);//用于判断
     if(c == '-'){
         suf[suf_i++] = zero;
         ungetc(c,fin);
@@ -544,8 +558,8 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
     }
     while(1){
         if(token.name[0]==59||token.name[0]==41||token.name[0]==93){//表达式结束
-            for(int i=0;i<suf_i;i++){
-                if(suf[suf_i].name[0]=='91'){//表明当前表达式是数组下标，不应该进行代码生成，直接结束函数
+            for(i=0;i<suf_i;i++){
+                if(suf[suf_i].name[0]==91){//表明当前表达式是数组下标，不应该进行代码生成，直接结束函数
                     ungetc(suf[suf_i].name[0],fin);
                     return;
                 }
@@ -558,20 +572,20 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
         }
         else if(strcmp(token.type,"ident")==0){//若为标识符，则需判断是常量、变量、数组，或是函数调用
             ad = position(addr0,token);
-            if(strcmp(vm[ad].kind,"array")==0){
-                suf[suf_i++] = vm[ad];
+            if(strcmp(syms[ad].kind,"array")==0){
+                suf[suf_i++] = syms[ad];
                 token = get_sym();
                 suf[suf_i++] = token;//将中括号保存在结果中用于标识数组下标的边界
                 expression();///这里假设不会发生中括号的嵌套
                 token = get_sym();
                 suf[suf_i++] = token;//]作为数组元素标识符结束的标记
             }
-            else if(strcmp(vm[ad].kind,"function")==0){
-                suf[suf_i++] = vm[ad];///函数名
+            else if(strcmp(syms[ad].kind,"function")==0){
+                suf[suf_i++] = syms[ad];///函数名
                 func_call(ad);
             }
             else{
-                suf[suf_i++] = vm[ad];
+                suf[suf_i++] = syms[ad];
             }
         }
         else if(token.name[0]==40){///(
@@ -603,7 +617,7 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
         }
         else{
             error(num_l,6);
-            whlie((c=fgetc(fin)!)=59){
+            while((c=fgetc(fin))!=59){
                 c = fgetc(fin);//跳过当前行
             }
         }
@@ -689,7 +703,7 @@ symbol get_sym(){
         strcpy(token.type,"relation");
         token.value = (float)(c - '\0');//关系运算符之=
     }
-    else if(c == 58){
+    else if(c == 58){///冒号
         c = fgetc(fin);
         if(c == '='){
             strcpy(token.name,":=");
@@ -864,6 +878,13 @@ int main(){
     FILE *fout;
     int n = 0;
     int i = 0;
+
+    strcpy(zero.name,"0");
+    strcpy(zero.type,"float");
+    strcpy(zero.kind,"const");
+    zero.value = 0;
+    zero.level = 0;
+    zero.addr = -1;///初始化一个常量零用于解决表达式前可能存在的运算符的问题、
     //symbol cur_token;
     reserved[0] = "array";  reserved[1] = "begin";
     reserved[2] = "char";   reserved[3] = "const";
@@ -883,7 +904,7 @@ int main(){
         printf("Open failed");
         return 1;
     }
-    //fout = fopen("the_result.txt","w");
+    fout = fopen("the_result.txt","w");
     while(1){
         token0 = get_sym();
         n = statement(token0);
@@ -898,7 +919,7 @@ int main(){
     //fprintf(fout,"%d %s %s %s\n",num_t,"123",token0.type,token0.name);
     printf("end of file");
     fclose(fin);
-    //fclose(fout);
+    fclose(fout);
 
     return 0;
 }
