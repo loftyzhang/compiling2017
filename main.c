@@ -19,7 +19,7 @@
 #define norw 21//number of reserved words
 FILE* fin;
 
-enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT};
+enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT,END};
 /*lit 取常量到栈顶
   opr 做运算
   lod 取变量到栈顶
@@ -31,6 +31,7 @@ enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT};
   jpc 条件跳转
   red 读并保存
   wrt 输出栈顶
+  end 过程或函数或程序的结尾
 */
 enum code codes[1000]={RED};//pcode指令的指令部分
 
@@ -43,7 +44,6 @@ int num_b = 0;///begin和end对数
 int num_p = 0;///小括号的对数
 int addr = 0;///虚拟地址空间中的地址
 int addr0 = 0;///基地址，主要用于辅助position函数
-int depth = 0;///调用层次数
 int top = 0;///运行栈栈顶
 int bp = 0;///当前分程序数据区的起始地址
 int p0 = 0;///解释执行的pcode下标
@@ -72,7 +72,7 @@ typedef struct sym{
     char type[20];//类型int char string float
     char kind[20];//array func pro const var///这个 地方是为了这类特别的元素准备的，其他统称normal，这一位置只需在声明语句中初始化，
     float value;//值
-    int level;///声明层次
+    int level;///所属分程序的起始地址
     int addr;///这里对过程和函数是起始地址，对其内部声明的量是相对地址。
 }symbol;//这里只记录symbol的名称和类型，若为变量或常量则以浮点数形式记录其值，字符保存的是ascii码
 //对于function 和procedure,value 保存其入口地址
@@ -99,6 +99,7 @@ void for_state();
 void while_state();
 void expression();//表达式，这里是做一个中缀变后缀的转换，然后计算后缀表达式。用于保存后缀表达式的栈不必是全局变量。
 symbol get_sym();
+void listcode(int a,int b,int c);///a,b,c对应一条指令的三个参数
 int position(int b,symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
@@ -205,7 +206,6 @@ int statement(symbol sym){
         }
     }
     else if(strcmp(sym.type,"ident")==0){
-        ///正常这里需要进行表达式处理，但是这次作业就读就行了。。。
         i = position(0,sym);
         if(i!=-1){
             if(strcmp(syms[i].kind,"procedure")==0){
@@ -267,7 +267,7 @@ void const_dec(symbol sym){
     strcpy(token.type,token1.type);
     strcpy(token.kind,"const");
     token.value = token1.value;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
-    token.level = depth;///层次为当前层
+    token.level = addr0;///记录声明位置
     token.addr = addr;
     vm[addr] = token.value;
     addr = addr + 1;
@@ -282,7 +282,7 @@ void var_dec(symbol sym){
     int i = 0;
     int j = 0;
     strcpy(token.name,sym.name);
-    token.level = depth;
+    token.level = addr0;
     token.addr = addr;
     strcpy(token.type,"unknown");////这里暂时不清楚变量类型，为便于处理多个变量的声明，先放一个在这
     syms[num_i++] = token;
@@ -290,7 +290,7 @@ void var_dec(symbol sym){
     token1 = get_sym();//冒号或者逗号，可能是一次对多个变量进行声明
     while(token1.name[0]==44){//逗号
         token1 = get_sym();//下一个变量
-        token1.level = depth;
+        token1.level = addr0;
         token1.addr = addr;
         strcpy(token1.type,"unknown");
         syms[num_i++] = token1;
@@ -312,9 +312,8 @@ void var_dec(symbol sym){
         get_sym();//of
         token1 = get_sym();////这里可能有很多的错误类型，都归类与error11
         strcpy(token1.kind,"array");
-        //这里只记录了数组的数据类型，没有注明这是一个数组
-
     }
+    listcode(6,0,i*size);///在数据栈中申请被声明变量所需的空间
     while(i>=1){
         strcpy(syms[num_i-i].type,token1.name);
         strcpy(syms[num_i-i].kind,token1.kind);
@@ -323,22 +322,21 @@ void var_dec(symbol sym){
         }///初始化
         i--;//补入数据类型
     }
-
     get_sym();//分号
 }///var_dec关于变量声明，相应的动作是在运行栈中预留空间，
  ///仅在赋值语句等需要保存的情形下才将变量写回内存，并在适当时候删除其在运行栈中的数据区
 void pro_dec(symbol sym){
     symbol token;
     symbol token1;
-    int n = 10;
+    int n = num_i;
     addr0 = addr;
     token = sym;
     strcpy(token.type,"procedure");//这里得到了过程名
     strcpy(token.kind,"procedure");///过程没有返回值，故type和kind相同
-    token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
-    token.level = depth;
-    token.addr = addr;///这里也应该是函数在虚拟内存空间的起始位置，先保存参数再保存过程内生成的量
-    depth++;
+    token.value = p0;///这里应该是函数在指令序列中的起始位置
+    token.level = addr0;
+    token.addr = addr;///对于procedure这个地址中是没有值的
+    vm[addr] = 0;
     addr++;
     syms[num_i++] = token;//将过程登记入符号表
     token1 = get_sym();//开始参数表部分(40 41 91 93
@@ -355,29 +353,31 @@ void pro_dec(symbol sym){
             }
         }
     }///参数表结束
+    syms[n] = p0;///将函数的入口设置为参数表之后的语句
+    n = 10;///为了避免误会，先把n初始化
     while(1){
         token1 = get_sym();
         //printf("%s\n",token1.name);
-        n = statement(token1);
+        n = statement(token1);///0123
         if(n==2){//end;时完成分程序分析，退出
             break;
         }
     }//对分程序部分进行分析
-    depth = token.level;//把这个层数复位
     addr0 = addr;////过程段结束，基地址复位
+    listcode(11,0,1);
 }///pro_dec
 void func_dec(symbol sym){
     symbol token;
     symbol token1;
     addr0 = addr;
-    int n = 10;
+    int n = num_i;
     int m = 0;
     token = sym;
     strcpy(token.kind,"function");//这里得到了函数名
-    token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
-    token.level = depth;
-    token.addr = addr;///这里也应该是函数在虚拟内存空间的起始位置，先保存参数再保存过程内生成的量
-    depth++;
+    token.value = p0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
+    token.level = addr0;
+    token.addr = addr;///这里保存的是function的返回值
+    vm[addr] = 0;
     addr++;
     m = num_i;
     syms[num_i++] = token;//将过程登记入符号表
@@ -396,28 +396,32 @@ void func_dec(symbol sym){
             }
         }
     }///参数表结束
+    syms[num_i] = p0;///将函数入口设置为参数表之后的语句
+    n = 10;///为避免误会，将n初始化
     token = get_sym();//函数的返回值类型
     strcpy(syms[m].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
     while(1){
         token1 = get_sym();
-        n = statement(token1);
+        n = statement(token1);//0123
         if(n==2){//end;时完成分程序分析，退出
             break;
         }
     }//对分程序部分进行分析
-    depth = token.level;//把这个层数复位
     addr0 = addr;//函数段结束，基地址复位
+    listcode(11,0,2);
 }//func_dec
 void pro_call(int n){
     symbol token;
-    int i = 0;
-    i = n;
-    token = get_sym();
+    int i = n;
+    int p = 0;///记录函数入口
+    token1 = get_sym();//开始参数表部分(40 41 91 93
+    if(token1.name[0]==40){///左括号，40
+        
+    }///参数表结束
     while(token.name[0]!=59){//分号
-        token = get_sym();
+        token = get_sym();//调用设涉及跳转以及参数传递
     }////这里暂时这样处理
-
-}
+}////在这一部分首先需要把实际参数加载入数据栈，然后再跳转，这里lod之前应该进行地址的声明
 void func_call(int n){//应包括跳转和将参数加载到运行栈两部分
     symbol token;
     int i = 0;
@@ -849,7 +853,7 @@ symbol get_sym(){
  int position(int b,symbol sym){//在符号表中寻找当前标识符
     int i = 0;
     for(i = b;i<num_i;i++){
-        if(strcmp(sym.name,syms[i].name)==0){//这里有一些问题，先保证可以用于识别函数调用
+        if(strcmp(sym.name,syms[i].name)==0){
             return i;
         }////一种可以考虑的办法是给出一个查找起点，用于解决不同层次间变量同名可能带来的问题
     }
@@ -872,6 +876,26 @@ int search_rword(char* s){//保留字数组为字典序
     }
     return -1;
 }///确认sym是否是保留字，若是则返回其标号，不是则返回-1
+
+void listcode(int a,int b,int c){
+    enum code code0;
+    switch(a){
+        case 0:codes[p0]=LIT;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("LIT");break;
+        case 1:codes[p0]=OPR;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("OPR");break;
+        case 2:codes[p0]=LOD;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("LOD");break;
+        case 3:codes[p0]=STO;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("STO");break;
+        case 4:codes[p0]=CAL;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("CAL");break;
+        case 5:codes[p0]=CLL;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("CLL");break;
+        case 6:codes[p0]=ADD;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("ADD");break;
+        case 7:codes[p0]=JMP;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("JMP");break;
+        case 8:codes[p0]=JPC;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("JPC");break;
+        case 9:codes[p0]=RED;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("RED");break;
+        case 10:codes[p0]=WRT;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("WRT");break;
+        case 11:codes[p0]=END;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("END");break;
+        default:break;
+    }
+    printf(" %d %d\n",&a,&b);///用于测试
+}
 
 int main(){
     char fname[100];//文件路径
