@@ -11,6 +11,7 @@
 //此代码尚未解决begin和end不匹配的问题。
 //此代码还没记录程序的入口。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。
 //符号表元素的value项没有实际意义，各项的值应通过value去查找
+//不纠结了，就假装看不懂文法，函数参数必须是变量了==
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -44,6 +45,7 @@ int num_b = 0;///begin和end对数
 int num_p = 0;///小括号的对数
 int addr = 0;///虚拟地址空间中的地址
 int addr0 = 0;///基地址，主要用于辅助position函数
+int addr00= 0;///保存上一级模块的基地址
 int top = 0;///运行栈栈顶
 int bp = 0;///当前分程序数据区的起始地址
 int p0 = 0;///解释执行的pcode下标
@@ -122,6 +124,7 @@ void error(int a,int b){
         case 13:printf("error in line %d,illegal function declaration\n",a);break;
         case 14:printf("error in line %d,illegal proccedure declaration\n",a);break;
         case 15:printf("error in line %d,unpaired parens\n",a);break;
+        case 16:printf("error in line %d,illegal procedure call",a);break;
         default:break;
     }
     err++;
@@ -157,7 +160,7 @@ int statement(symbol sym){
         printf("this is a function declaration statement!\n");
         func_dec(token);
         return 0;
-    }/////根据getsym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
+    }/////根据get_sym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
     else if(strcmp(sym.name,"read")==0){
         reading();
         printf("this is a read statement!\n");
@@ -213,44 +216,39 @@ int statement(symbol sym){
                 pro_call(i);
                 return 0;
             }
-            else if(strcmp(syms[i].kind,"function")==0){
-                token = get_sym();
-                if(strcmp(token.type,"assignment")==0){
-                   while(1){
-                    token = get_sym();
-                    if(strcmp(token.type,"semicolon")==0){///赋值语句肯定是分号结尾没跑了
-                            printf("this is a assignment statement!\n");
-                            return 0;
-                        }////这里还需要判断是否为函数或过程的调用语句
-                    }
-                }
-                ungetc(token.name[0],fin);///若不是赋值语句则是函数调用，将括号返回字符流
-                printf("this is a function call statement!\n");
-                func_call(i);
+            else if(strcmp(syms[i].kind,"function")==0){//这里实际上只是针对函数结尾的保存函数返回值的语句
+                token = get_sym();///等号
+                expression();//表达式处理
+                listcode(3,0,0);//保存函数返回值到函数
+                token = get_sym();//分号
                 return 0;
             }//若为函数或过程则为调用语句，否则是赋值语句
         }
-        while(1){
+        else{//一般的赋值语句,需要判断该标识符是否是属于当前层次的
             token = get_sym();
-            if(strcmp(token.type,"semicolon")==0){///赋值语句肯定是分号结尾没跑了
+            if(strcmp(token.type,"assignment")==0){///赋值语句肯定是分号结尾没跑了
                 printf("this is a assignment statement!\n");
+                expression();
+                i = position(addr0,sym);
+                if(i>=0){
+                    listcode(3,0,i-addr0);///根据偏移量保存值
+                }
+                else{
+                    i = position(addr00,sym);///在上一级模块中查找
+                    if(i>=0){
+                        listcode(3,0,i-addr00);;
+                    }
+                    else{
+                        error(num_l,6);
+                    }
+                }
+                token = get_sym();//分号
                 return 0;
             }////这里还需要判断是否为函数或过程的调用语句
         }
     }
     return -1;
-}/* read
-    write
-    const_dec
-    var_dec
-    func_dec
-    pro_dec
-    func_call
-    pro_call
-    if
-    for
-    while
-*/
+}
 /* 预计若为标识符，则是赋值,因为不支持隐式声明，相应的应给出错误类型
     若为句型标识则判断为对应句型，
     begin和end中递归调用此函数
@@ -333,12 +331,13 @@ void pro_dec(symbol sym){
     token = sym;
     strcpy(token.type,"procedure");//这里得到了过程名
     strcpy(token.kind,"procedure");///过程没有返回值，故type和kind相同
-    token.value = p0;///这里应该是函数在指令序列中的起始位置
+    token.value = 0;///这里应该是函数在指令序列中的起始位置
     token.level = addr0;
     token.addr = addr;///对于procedure这个地址中是没有值的
     vm[addr] = 0;
     addr++;
     syms[num_i++] = token;//将过程登记入符号表
+    listcode(6,0,1);//为过程本身申请一个空间
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
         while(token1.name[0]!=59){//分号59
@@ -352,8 +351,8 @@ void pro_dec(symbol sym){
                 error(num_l,14);
             }
         }
-    }///参数表结束
-    syms[n] = p0;///将函数的入口设置为参数表之后的语句
+    }///参数表结束,将参数表为空的情况视为非法。
+    syms[n].value = p0;///将函数的入口设置为参数表之后的语句
     n = 10;///为了避免误会，先把n初始化
     while(1){
         token1 = get_sym();
@@ -371,16 +370,16 @@ void func_dec(symbol sym){
     symbol token1;
     addr0 = addr;
     int n = num_i;
-    int m = 0;
     token = sym;
     strcpy(token.kind,"function");//这里得到了函数名
-    token.value = p0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
+    token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
     token.level = addr0;
     token.addr = addr;///这里保存的是function的返回值
     vm[addr] = 0;
     addr++;
-    m = num_i;
+    n = num_i;
     syms[num_i++] = token;//将过程登记入符号表
+    listcode(6,0,1);//为保存函数值申请一个空间
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
         while(token1.name[0]!=58){//冒号58
@@ -396,10 +395,10 @@ void func_dec(symbol sym){
             }
         }
     }///参数表结束
-    syms[num_i] = p0;///将函数入口设置为参数表之后的语句
-    n = 10;///为避免误会，将n初始化
+    syms[n].value = p0;///将函数入口设置为参数表之后的语句
     token = get_sym();//函数的返回值类型
-    strcpy(syms[m].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
+    strcpy(syms[n].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
+    n = 10;//初始化n
     while(1){
         token1 = get_sym();
         n = statement(token1);//0123
@@ -412,29 +411,70 @@ void func_dec(symbol sym){
 }//func_dec
 void pro_call(int n){
     symbol token;
-    int i = n;
-    int p = 0;///记录函数入口
-    token1 = get_sym();//开始参数表部分(40 41 91 93
-    if(token1.name[0]==40){///左括号，40
-        
+    int i = 0;
+    int j = 0;
+    int p = 0;
+    p = (int)syms[n].value;///记录函数入口
+    token = get_sym();//开始参数表部分(40 41 91 93
+    if(token.name[0]==40){///左括号，40
+        while(token.name[0]!=41){///右括号41
+            token = get_sym();
+            if(strcmp(tokem.tyoe,"var")==0){
+                token = get_sym();
+                j = position(addr0,token);
+                if(j>=0){
+                    i++;
+                    token = get_sym();
+                }
+                else{
+                    error(num_l,16);
+                    while(token.name[0]!=59){
+                        token = get_sym();
+                    }
+                    return;
+                }
+            }
+            token = get_sym();
+        }
+    token = get_sym();//数据类型
+    if(strcmp(token.name,syms[j].tyoe)!=0){
+        token = get_sym();
+        error(num_l,16);
+        return;
+    }
+    token1 = get_sym();///分号
+    listcode(6,0,i);//为这些变量申请空间
     }///参数表结束
-    while(token.name[0]!=59){//分号
-        token = get_sym();//调用设涉及跳转以及参数传递
-    }////这里暂时这样处理
+    listcode(5,1,p);//过程调用语句这里好像调用和跳转没啥区别。
 }////在这一部分首先需要把实际参数加载入数据栈，然后再跳转，这里lod之前应该进行地址的声明
-void func_call(int n){//应包括跳转和将参数加载到运行栈两部分
+void func_call(int n){//应包括跳转和将参数加载到运行栈两部分，仅处理到参数表结束
     symbol token;
     int i = 0;
-    char c = '\0';
-    i = n;
-    token = get_sym();//（
-    while(token.name[0]!=41){//)表示参数表结束
-        token = get_sym();
-    }////这里暂时这样处理
-    c =fgetc(fin);
-    if(c != 59){
-        ungetc(c,fin);
-    }///若不是分号则退回
+    int j = 0;
+    int p = 0;
+    p = (int)syms[n].value;
+    token = get_sym();//(
+    if(token.name[0]==40){
+        while(token.name[0]!=58){///冒号58
+            token = get_sym();
+            if(strcmp(tokem.tyoe,"var")==0){
+                token = get_sym();
+                j = position(addr0,token);
+                if(j>=0){
+                    i++;
+                    token = get_sym();
+                }
+                else{
+                    error(num_l,16);
+                    while(token.name[0]!=59){
+                        token = get_sym();
+                    }
+                    return;
+                }
+            }
+            token = get_sym();
+        }
+    }
 }
 void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
     symbol token;
