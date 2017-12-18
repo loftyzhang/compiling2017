@@ -44,8 +44,10 @@ int num_i = 0;//符号表项数
 int num_b = 0;///begin和end对数
 int num_p = 0;///小括号的对数
 int addr = 0;///虚拟地址空间中的地址
-int addr0 = 0;///基地址，主要用于辅助position函数
-int addr00= 0;///保存上一级模块的基地址
+int addr0 = 0;///基地址，主要用于各种声明场合
+int id   = 0;//某元素在符号表中地址
+int id0  = 0;//某模块在符号表的起始地址
+int id00 = 0;//上一级模块在符号表的起始地址
 int top = 0;///运行栈栈顶
 int bp = 0;///当前分程序数据区的起始地址
 int p0 = 0;///解释执行的pcode下标
@@ -213,7 +215,9 @@ int statement(symbol sym){
         if(i!=-1){
             if(strcmp(syms[i].kind,"procedure")==0){
                 printf("this is a procedure call statement!\n");
+                id00 = id0;///调用前保存上一级在符号表中的位置
                 pro_call(i);
+                id00 = 0;///复位
                 return 0;
             }
             else if(strcmp(syms[i].kind,"function")==0){//这里实际上只是针对函数结尾的保存函数返回值的语句
@@ -229,14 +233,14 @@ int statement(symbol sym){
             if(strcmp(token.type,"assignment")==0){///赋值语句肯定是分号结尾没跑了
                 printf("this is a assignment statement!\n");
                 expression();
-                i = position(addr0,sym);
+                i = position(id0,sym);
                 if(i>=0){
-                    listcode(3,0,i-addr0);///根据偏移量保存值
+                    listcode(3,0,i-id0);///根据偏移量保存值
                 }
                 else{
-                    i = position(addr00,sym);///在上一级模块中查找
+                    i = position(id00,sym);///在上一级模块中查找
                     if(i>=0){
-                        listcode(3,0,i-addr00);;
+                        listcode(3,0,i-id00);;
                     }
                     else{
                         error(num_l,6);
@@ -265,7 +269,7 @@ void const_dec(symbol sym){
     strcpy(token.type,token1.type);
     strcpy(token.kind,"const");
     token.value = token1.value;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
-    token.level = addr0;///记录声明位置
+    token.level = id0;///记录声明位置
     token.addr = addr;
     vm[addr] = token.value;
     addr = addr + 1;
@@ -280,7 +284,7 @@ void var_dec(symbol sym){
     int i = 0;
     int j = 0;
     strcpy(token.name,sym.name);
-    token.level = addr0;
+    token.level = id0;
     token.addr = addr;
     strcpy(token.type,"unknown");////这里暂时不清楚变量类型，为便于处理多个变量的声明，先放一个在这
     syms[num_i++] = token;
@@ -288,7 +292,7 @@ void var_dec(symbol sym){
     token1 = get_sym();//冒号或者逗号，可能是一次对多个变量进行声明
     while(token1.name[0]==44){//逗号
         token1 = get_sym();//下一个变量
-        token1.level = addr0;
+        token1.level = id0;
         token1.addr = addr;
         strcpy(token1.type,"unknown");
         syms[num_i++] = token1;
@@ -327,12 +331,13 @@ void pro_dec(symbol sym){
     symbol token;
     symbol token1;
     int n = num_i;
+    id0 = num_i;
     addr0 = addr;
     token = sym;
     strcpy(token.type,"procedure");//这里得到了过程名
     strcpy(token.kind,"procedure");///过程没有返回值，故type和kind相同
     token.value = 0;///这里应该是函数在指令序列中的起始位置
-    token.level = addr0;
+    token.level = id0;
     token.addr = addr;///对于procedure这个地址中是没有值的
     vm[addr] = 0;
     addr++;
@@ -362,18 +367,20 @@ void pro_dec(symbol sym){
             break;
         }
     }//对分程序部分进行分析
+    id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
-    listcode(11,0,1);
-}///pro_dec
+    listcode(11,0,1);//结束语句
+}///pro_dec、有关空间申请的指令都在其中调用的语句分析中进行，由于函数调用时参数表已经单独处理，故不再进行空间申请。
 void func_dec(symbol sym){
     symbol token;
     symbol token1;
     addr0 = addr;
+    id0 = num_i;
     int n = num_i;
     token = sym;
     strcpy(token.kind,"function");//这里得到了函数名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
-    token.level = addr0;
+    token.level = id0;
     token.addr = addr;///这里保存的是function的返回值
     vm[addr] = 0;
     addr++;
@@ -406,11 +413,13 @@ void func_dec(symbol sym){
             break;
         }
     }//对分程序部分进行分析
+    id0 = num_i;
     addr0 = addr;//函数段结束，基地址复位
     listcode(11,0,2);
 }//func_dec
 void pro_call(int n){
     symbol token;
+    id0 = n;//设当前模块起始为基地址
     int i = 0;
     int j = 0;
     int p = 0;
@@ -418,82 +427,55 @@ void pro_call(int n){
     token = get_sym();//开始参数表部分(40 41 91 93
     if(token.name[0]==40){///左括号，40
         while(token.name[0]!=41){///右括号41
-            token = get_sym();
-            if(strcmp(tokem.tyoe,"var")==0){
-                token = get_sym();
-                j = position(addr0,token);
-                if(j>=0){
-                    i++;
-                    token = get_sym();
-                }
-                else{
-                    error(num_l,16);
-                    while(token.name[0]!=59){
-                        token = get_sym();
-                    }
-                    return;
-                }
-            }
+            expression();///实际参数为表达式
+            i++;
             token = get_sym();
         }
-    token = get_sym();//数据类型
-    if(strcmp(token.name,syms[j].tyoe)!=0){
-        token = get_sym();
-        error(num_l,16);
-        return;
     }
     token1 = get_sym();///分号
-    listcode(6,0,i);//为这些变量申请空间
-    }///参数表结束
-    listcode(5,1,p);//过程调用语句这里好像调用和跳转没啥区别。
+    listcode(6,0,i);//为参数申请空间
+    listcode(5,0,p);//过程调用语句这里好像调用和跳转没啥区别。
+    id0 = id00;///复位
 }////在这一部分首先需要把实际参数加载入数据栈，然后再跳转，这里lod之前应该进行地址的声明
 void func_call(int n){//应包括跳转和将参数加载到运行栈两部分，仅处理到参数表结束
     symbol token;
+    id0 = n;
     int i = 0;
     int j = 0;
     int p = 0;
     p = (int)syms[n].value;
     token = get_sym();//(
     if(token.name[0]==40){
-        while(token.name[0]!=58){///冒号58
-            token = get_sym();
-            if(strcmp(tokem.tyoe,"var")==0){
-                token = get_sym();
-                j = position(addr0,token);
-                if(j>=0){
-                    i++;
-                    token = get_sym();
-                }
-                else{
-                    error(num_l,16);
-                    while(token.name[0]!=59){
-                        token = get_sym();
-                    }
-                    return;
-                }
-            }
+        while(token.name[0]!=41){///右括号58
+            expression();
+            i++;
             token = get_sym();
         }
     }
+    listcode(6,0,i);///为参数申请空间
+    listcode(4,0,p);///函数调用
+    id0 = id00;
 }
 void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
     symbol token;
-    symbol token1;
+    //symbol token1;
     int i = 0;
     int j = 0;
     token = get_sym();///肯定是括号了
-    while(token.name[0]!=59){////分号
+    while(token.name[0]!=41){////右括号
         token = get_sym();
-        i = position(addr0,token);////定位
-        token = get_sym();
-        if(strcmp(token.name,"[")){//[,表明v是一个数组元素
-            token1 = get_sym();
+        i = position(id0,token);////定位
+        if(strcmp(syms[i].kind,"array")==0){
+            token = get_sym();//[
+            token = get_sym();//下标
             j = (int)token.value;
-            token = get_sym();///]
-            token = get_sym();////这个地方比较混乱，但是没啥问题
-        }///当标识符后为逗号或括号时直接进入下一次循环即可。
-    }////这里暂时这样处理
-//需要找到每个 元素的位置。
+            token = get_sym();
+        }
+        listcode(9,0,i+j);///通过绝对地址找到目标位置，下同。
+        i = 0;
+        j = 0;///复位
+    }
+    token = get_sym();///分号
 }////reading
 void writing(){
     symbol token;
@@ -504,6 +486,8 @@ void writing(){
     if(c==34){
         ungetc(c,fin);
         token = get_sym();//字符串
+        syms[num_i++] = token;
+        listcode(10,0,num_i-1);///字符串录入符号表后根据其地址进行输出。
         token = get_sym();
         if(strcmp(token.type,"colon")==0){
             expression();/////表达式处理不应该超出表达式
@@ -513,6 +497,7 @@ void writing(){
     else if((c>'0'&&c<'9')||(c>'a'&&c<'z')||(c>'A'&&c<'Z')){//若c是字母或数字则是表达式的开头
         ungetc(c,fin);
         expression();///不是字符串就是表达式
+        listcode(10,0,-1);///表达式则输出栈顶元素
         token = get_sym();//应该是括号
     }
     else{//非法

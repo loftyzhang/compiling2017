@@ -17,6 +17,7 @@ procedure sorting (var n:integer);
 				num[i] := num[j];
 				num[j] := t;
 			end
+	write(n);
 	end; 
 function getaverage (var n:integer):real;
 	var i:integer;
@@ -28,6 +29,7 @@ function getaverage (var n:integer):real;
 			n := num[i]+n;
 		n := n/5;
 		getaverage := n;
+	write(n);
 	end;
 begin
 	i:=0;
