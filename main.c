@@ -6,7 +6,6 @@
 通过以某一函数或过程在符号表中的起始位置为起点，结合偏移量实现其中参数和其他相关量的查找，
 符号表查找部分通过所得结果大于所属函数或过程的下标来保证查找的正确性，并根据符号表获得其
 */
-///测试样例中没有出现<函数标识符> := <表达式>这种形式的语句，因为不清楚其含义
 //此代码中认为数组元素下标不会是数组元素
 //此代码尚未解决begin和end不匹配的问题。
 //此代码还没记录程序的入口。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。。
@@ -571,31 +570,52 @@ void for_state(){
     int c = 0;
     token1 = get_sym();//步长变量
     token = get_sym();//等号
-    expression();///////////////////////////////////////////////////////////////////////////////
-    if(strcmp(token.type,"assignment")==0){
-
+    expression();///步长初始值
+    a = position(id0,token1);//这里略去了判断赋值符号的步骤
+    token = get_sym();//to  downto
+    expression();///步长的终点
+    if(strcmp(token.name,"to")==0){
+        listcode(1,0,1);//后比前大，减法    
     }
+    else if(strcmp(token.name,"downto")==0){
+        listcode(1,0,1);
+        listcode(0,0,-1);
+        listcode(1,0,2);//结果乘以-1得到步长
+    }
+    else{
+        error(num_l,7);
+    }///判断步长是自增还是自减
+    listcode(3,0,a-id0);///保存步长，此后无论步长都是做自减
+    c = p0;///保留循环入口指令地址
+    listcode(0,0,-1);
+    listcode(1,0,0);//步长自减
+    listcode(3,0,a-id0);//保存新的步长
     do{
         token = get_sym();
         statement(token);
     }
     while(num_b!=n);//根据begin-end是否匹配判定do后语句是否结束，同时解决了普通语句及复合语句
-}
+    listcode(2,0,a-id0);//取步长
+    listcode(0,0,0);///取零
+    listcode(1,0,8);//判断步长是否大于零
+    listcode(8,0,c);//若大于dengyu零则重新进入循环
+}//for_state
 void while_state(){////以do起始
     symbol token;
+    symbol token1;
+    int a = p0;//保留循环入口
+    int b = 0;
+    int c = 0;
     int n = num_b;
-     do{
+    do{
         token = get_sym();
         statement(token);
-
     }
     while(num_b!=n);//根据begin-end是否匹配判定do后语句是否结束，同时解决了普通语句及复合语句
     token = get_sym();//while
-    while(token.name[0]!=59){
-        token = get_sym();
-    }
-}
-
+    condition();
+    listcode(8,0,a);//条件通过则返回循环
+}//while_state
 void condition(){
     symbol token;
     int a = -1;
@@ -622,7 +642,6 @@ void condition(){
     }
     listcode(1,0,a);
 }///conditon
-
 void expression(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
     symbol token,token1;    //这个问题里最重要的还是找出表达式的边界
     symbol ops[20];
@@ -718,9 +737,13 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
         }
         token = get_sym();
     }
-
+    get_expre();
 }///这还需要注意的是，对于数组下标位置上的表达式，可以使用递归的方法分析，对于小括号则不应该递归调用此函数
 
+void get_expre(){
+    symbol token;
+    
+}
 
 symbol get_sym(){
     symbol token;
