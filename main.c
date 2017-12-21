@@ -281,7 +281,7 @@ void const_dec(symbol sym){
         const_dec(token);///若连续声明则递归调用
     }
 }///const_Dec常量的值直接写入内存，故不会有相应指令。。。。
-void var_dec(symbol sym){
+int var_dec(symbol sym){
     symbol token;
     symbol token1;
     int size = 1;
@@ -324,6 +324,7 @@ void var_dec(symbol sym){
         strcpy(token1.kind,"array");
     }
     listcode(6,0,i*size);///在数据栈中申请被声明变量所需的空间
+    size = i;///记录变量个数
     while(i>=1){
         strcpy(syms[num_i-i].type,token1.name);
         strcpy(syms[num_i-i].kind,token1.kind);
@@ -339,28 +340,29 @@ void var_dec(symbol sym){
             for(i=strlen(token.name);i>0;i--){
                 ungetc(token.name[i-1],fin);
             }
-            return;///变量声明结束后应为过程或函数的说明部分
+            return size;///变量声明结束后应为过程或函数的说明部分
         }
         else if(strcmp(token.name,"var")==0){
             token = get_sym();
-            var_dec(token);///这里专门用作处理形式参数表
+            size = size + var_dec(token);///这里专门用作处理形式参数表
         }
         else if(strcmp(token.name,"begin")==0){
-            return;///变量声明结束
+            return size;///变量声明结束
         }
         else{
-            var_dec(token);
+            size = size + var_dec(token);
         }
     }
     else if(strcmp(token.name,")")==0){
-        return;//这句话好像是多余的，主要是用于应对参数表结尾的情形
+        return size;//这句话好像是多余的，主要是用于应对参数表结尾的情形
     }
+    return size;
 }///var_dec关于变量声明，相应的动作是在运行栈中预留空间，
  ///仅在赋值语句等需要保存的情形下才将变量写回内存，并在适当时候删除其在运行栈中的数据区
 void pro_dec(symbol sym){
     symbol token;
     symbol token1;
-    int n = num_i;
+    int n = 0;
     id0 = num_i;
     addr0 = addr;
     token = sym;
@@ -372,19 +374,21 @@ void pro_dec(symbol sym){
     vm[addr] = 0;
     addr++;
     syms[num_i++] = token;//将过程登记入符号表
+    syms[num_i++] = zero;///这里保存参数个数，用零占位
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
         token1 = get_sym();
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
-            var_dec(token1);///解决了整个参数表
+            n = var_dec(token1);///解决了整个参数表
             token1 = get_sym();//分号
         }
         else{
             error(num_l,14);
         }
     }///参数表结束,将参数表为空的情况视为非法。参数表的相关语句在程序中从未被执行过，但是需要保留参数个数信息
-    syms[n].value = p0;///将函数的入口设置为参数表之后的语句
+    syms[id0].value = p0;///将函数的入口设置为参数表之后的语句
+    syms[id0+1].value = n;///保存参数个数
     n = 10;///为了避免误会，先把n初始化
     while(1){
         token1 = get_sym();
@@ -403,7 +407,7 @@ void func_dec(symbol sym){
     symbol token1;
     addr0 = addr;
     id0 = num_i;
-    int n = num_i;
+    int n = 0;
     token = sym;
     strcpy(token.kind,"function");//这里得到了函数名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
@@ -411,14 +415,14 @@ void func_dec(symbol sym){
     token.addr = addr;///这里保存的是function的返回值
     vm[addr] = 0;
     addr++;
-    n = num_i;
     syms[num_i++] = token;//将过程登记入符号表
+    syms[num_i++] = zero;///保存参数个数，用零占位
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
         token1 = get_sym();
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
-            var_dec(token1);///解决整个参数表
+            n = var_dec(token1);///解决整个参数表
             token1 = get_sym();//冒号
         }
         else{
@@ -426,7 +430,8 @@ void func_dec(symbol sym){
             error(num_l,13);
         }
     }///参数表结束
-    syms[n].value = p0;///将函数入口设置为参数表之后的语句
+    syms[id0].value = p0;///将函数入口设置为参数表之后的语句
+    syms[id0+1].value = n;///保存参数个数
     token = get_sym();//函数的返回值类型
     strcpy(syms[n].type,token.name);//前面记录了函数在符号表中的位置，并据此记录其返回值类型
     n = 10;//初始化n
@@ -445,7 +450,7 @@ void pro_call(int n){
     symbol token;
     id0 = n;//设当前模块起始为基地址
     int i = 0;
-    //int j = 0;
+    int j = 0;
     int p = 0;
     p = (int)syms[n].value;///记录函数入口
     token = get_sym();//开始参数表部分(40 41 91 93
@@ -652,6 +657,7 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
     symbol ops[20];
     int i = 0;
     int j = 0;
+    int k = 0;
     char c = '\0';
     int ad = 0;
     //int op = 1;///用于正负的标识，注意测试样例中不会出现多个连续的正负号
@@ -673,27 +679,27 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
     }
     while(1){
         if((strcmp(token.type,"relation")==0)||(strcmp(token.type,"rword")==0)){////这里用于条件等语句
-            for(i=strlen(token.name);i>0;i--){
-                ungetc(token.name[i-1],fin);
+            for(k=strlen(token.name);k>0;k--){
+                ungetc(token.name[k-1],fin);
             }
             break;
         }
         else if(token.name[0]==93){//表达式结束]
-            for(i=0;i<suf_i;i++){
-                if(suf[i].name[0]==91){//表明当前表达式是数组下标，不应该进行代码生成，直接结束函数
+            for(k=0;k<suf_i;k++){
+                if(suf[k].name[0]==91){//表明当前表达式是数组下标，不应该进行代码生成，直接结束函数
                     suf[suf_i++] = token;///保存边界
                     return;
                 }
             }
-            if(i=suf_i){
-                error(num_l;15);
+            if(k==suf_i){
+                error(num_l,15);
             }
         }
         else if(token.name[0]==59){////分号，表达式结束
             ungetc(59,fin);
             break;
         }
-        else if(token.name[0]==41){///逗号比较特殊，需要判断括号是否来自表达式
+        else if(token.name[0]==41){///括号比较特殊，需要判断括号是否来自表达式
             token1 = get_sym();
             if(token1.name[0]==59){
                 ungetc(59,fin);
@@ -761,7 +767,7 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
 
 void get_expre(){
     //symbol token;
-    int i = suf_i-1;
+    int i = suf_i;
     int j = 0;
     for(j = 0;j<i;j++){
         printf("%s\n",suf[j].name);
