@@ -1,8 +1,6 @@
 const r = 1406;
 var   num:array[5]of integer;
-var   i:integer;
-var   average:real;
-var   num:array[5]of integer;
+var   i:integer;average:real;
 procedure sorting (var n:integer);
 	var i,j,t:integer;
 	begin

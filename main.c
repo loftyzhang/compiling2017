@@ -51,7 +51,7 @@ int top = 0;///运行栈栈顶
 int bp = 0;///当前分程序数据区的起始地址
 int p0 = 0;///解释执行的pcode下标
 int p1 = 0;///解释执行的下一条pcode
-int suf_i = 0;//用于表达式处理，分别是符号栈和结果栈的编号
+int suf_i = 0;//用于表达式处理,结果栈的编号
 
 float vm[1000] = {0};//模拟的地址空间-addr
 float run_stack[100]={0};///运行栈-top bp p0 p1
@@ -87,7 +87,6 @@ symbol suf[100];///suffix expression 保存作为转换结果的后缀表达式
 
 
 void error(int a ,int b);
-enum code listcode();
 int statement();
 void const_dec(symbol sym);
 void var_dec(symbol sym);
@@ -100,7 +99,9 @@ void writing();
 void if_state();
 void for_state();
 void while_state();
+void condition();
 void expression();//表达式，这里是做一个中缀变后缀的转换，然后计算后缀表达式。用于保存后缀表达式的栈不必是全局变量。
+void get_expre();///将表达式转为指令
 symbol get_sym();
 void listcode(int a,int b,int c);///a,b,c对应一条指令的三个参数
 int position(int b,symbol sym);
@@ -139,15 +140,15 @@ int statement(symbol sym){
     int i = 0;
     symbol token;
     if(strcmp(sym.name,"const")==0){
+        printf("this is a const declaration statement!\n");
         token = get_sym();
         const_dec(token);
-        printf("this is a const declaration statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"var")==0){
+        printf("this is a var declaration statement!\n");
         token = get_sym();
         var_dec(token);
-        printf("this is a var declaration statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"procedure")==0){
@@ -344,6 +345,9 @@ void var_dec(symbol sym){
             token = get_sym();
             var_dec(token);///这里专门用作处理形式参数表
         }
+        else if(strcmp(token.name,"begin")==0){
+            return;///变量声明结束
+        }
         else{
             var_dec(token);
         }
@@ -441,7 +445,7 @@ void pro_call(int n){
     symbol token;
     id0 = n;//设当前模块起始为基地址
     int i = 0;
-    int j = 0;
+    //int j = 0;
     int p = 0;
     p = (int)syms[n].value;///记录函数入口
     token = get_sym();//开始参数表部分(40 41 91 93
@@ -452,7 +456,7 @@ void pro_call(int n){
             token = get_sym();
         }
     }
-    token1 = get_sym();///分号
+    token = get_sym();///分号
     listcode(6,0,i);//为参数申请空间
     listcode(5,0,p);//过程调用语句这里好像调用和跳转没啥区别。
     id0 = id00;///复位
@@ -461,7 +465,7 @@ void func_call(int n){//应包括跳转和将参数加载到运行栈两部分�
     symbol token;
     id0 = n;
     int i = 0;
-    int j = 0;
+    //int j = 0;
     int p = 0;
     p = (int)syms[n].value;
     token = get_sym();//(
@@ -566,7 +570,7 @@ void for_state(){
     symbol token1;
     int n = num_b;
     int a = 0;
-    int b = 0;
+    //int b = 0;
     int c = 0;
     token1 = get_sym();//步长变量
     token = get_sym();//等号
@@ -575,7 +579,7 @@ void for_state(){
     token = get_sym();//to  downto
     expression();///步长的终点
     if(strcmp(token.name,"to")==0){
-        listcode(1,0,1);//后比前大，减法    
+        listcode(1,0,1);//后比前大，减法
     }
     else if(strcmp(token.name,"downto")==0){
         listcode(1,0,1);
@@ -590,6 +594,7 @@ void for_state(){
     listcode(0,0,-1);
     listcode(1,0,0);//步长自减
     listcode(3,0,a-id0);//保存新的步长
+    token = get_sym();///do
     do{
         token = get_sym();
         statement(token);
@@ -602,10 +607,10 @@ void for_state(){
 }//for_state
 void while_state(){////以do起始
     symbol token;
-    symbol token1;
+    //symbol token1;
     int a = p0;//保留循环入口
-    int b = 0;
-    int c = 0;
+    //int b = 0;
+    //int c = 0;
     int n = num_b;
     do{
         token = get_sym();
@@ -637,7 +642,7 @@ void condition(){
     else if(strcmp(token.name,">")==0){
         a = 8;
     }
-    else if(strcmp(token.name,">=")==-){
+    else if(strcmp(token.name,">=")==0){
         a = 9;
     }
     listcode(1,0,a);
@@ -650,7 +655,7 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
     char c = '\0';
     int ad = 0;
     //int op = 1;///用于正负的标识，注意测试样例中不会出现多个连续的正负号
-    int lp = 0;//运算符栈中左括号的数量，用于判断表达式结尾。
+    //int lp = 0;//运算符栈中左括号的数量，用于判断表达式结尾。
     c = fgetc(fin);//用于判断
     if(c == '-'){
         suf[suf_i++] = zero;
@@ -667,19 +672,46 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
         token = get_sym();
     }
     while(1){
-        if(strcmp(token.type,"relation")==0){////这里用于条件
+        if((strcmp(token.type,"relation")==0)||(strcmp(token.type,"rword")==0)){////这里用于条件等语句
+            for(i=strlen(token.name);i>0;i--){
+                ungetc(token.name[i-1],fin);
+            }
             break;
         }
-        else if(token.name[0]==59||token.name[0]==41||token.name[0]==93){//表达式结束;,),]
+        else if(token.name[0]==93){//表达式结束]
             for(i=0;i<suf_i;i++){
                 if(suf[i].name[0]==91){//表明当前表达式是数组下标，不应该进行代码生成，直接结束函数
                     suf[suf_i++] = token;///保存边界
-                    ungetc(suf[suf_i].name[0],fin);
                     return;
                 }
             }
-            ungetc(token.name[0],fin);
+            if(i=suf_i){
+                error(num_l;15);
+            }
+        }
+        else if(token.name[0]==59){////分号，表达式结束
+            ungetc(59,fin);
             break;
+        }
+        else if(token.name[0]==41){///逗号比较特殊，需要判断括号是否来自表达式
+            token1 = get_sym();
+            if(token1.name[0]==59){
+                ungetc(59,fin);
+                ungetc(41,fin);//此时说明是写语句结尾的括号，将括号分号退回
+            }
+            else{///表达式中括号需要将栈中内容弹出
+                for(j = j-1;(ops[i].name[0]!=40)&&j>=0;j--){
+                    suf[suf_i++] = ops[j];
+                }///这里j没有再减一，相当于将左括号弹出。
+                num_p--;
+                if(j<0){
+                    error(num_l,15);
+                    c = fgetc(fin);
+                    while(c!=59){
+                        c = fgetc(fin);
+                    }
+                }
+            }
         }
         else if(strcmp(token.type,"real")==0||(strcmp(token.type,"integer")==0)){//若为数字，即若为常量，直接入栈
             suf[i++] = token;
@@ -706,19 +738,6 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
             ops[j++] = token;//小括号直接进
             num_p++;
         }
-        else if(token.name[0]==41){
-            for(j = j-1;(ops[i].name[0]!=40)&&j>=0;j--){
-                suf[suf_i++] = ops[j];
-            }///这里j没有再减一，相当于将左括号弹出。
-            num_p--;
-            if(j<0){
-                error(num_l,15);
-                c = fgetc(fin);
-                while(c!=59){
-                    c = fgetc(fin);
-                }
-            }
-        }
         else if(token.name[0]=='*'||token.name[0]=='/'){//由于只有两种优先级，故乘除法直接进
             ops[j++] = token;
         }
@@ -741,8 +760,13 @@ void expression(){////想了想我觉得还是把中缀变后缀的好，然后�
 }///这还需要注意的是，对于数组下标位置上的表达式，可以使用递归的方法分析，对于小括号则不应该递归调用此函数
 
 void get_expre(){
-    symbol token;
-    
+    //symbol token;
+    int i = suf_i-1;
+    int j = 0;
+    for(j = 0;j<i;j++){
+        printf("%s\n",suf[j].name);
+        suf[j].name[0] = '\0';
+    }
 }
 
 symbol get_sym(){
@@ -992,7 +1016,6 @@ int search_rword(char* s){//保留字数组为字典序
 }///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
 void listcode(int a,int b,int c){
-    enum code code0;
     switch(a){
         case 0:codes[p0]=LIT;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("LIT");break;
         case 1:codes[p0]=OPR;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("OPR");break;
@@ -1008,7 +1031,7 @@ void listcode(int a,int b,int c){
         case 11:codes[p0]=END;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("END");break;
         default:break;
     }
-    printf(" %d %d\n",&a,&b);///用于测试
+    printf(" %d %d\n",b,c);///用于测试
 }
 
 int main(){
