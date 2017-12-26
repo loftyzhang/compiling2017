@@ -35,7 +35,8 @@ enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT,END};
 */
 enum code codes[1000]={RED};//pcode指令的指令部分
 
-int operand[1000][2]={{0},{0}};//pcode指令的操作数部分
+int operand1[1000]={0};//pcode指令的操作数部分
+float operand2[1000] = {0.};
 int err = 0;//number of errors
 int num_t = 0;//读取的token数量
 int num_l = 0;//行数
@@ -127,6 +128,7 @@ void error(int a,int b){
         case 14:printf("error in line %d,illegal proccedure declaration\n",a);break;
         case 15:printf("error in line %d,unpaired parens\n",a);break;
         case 16:printf("error in line %d,illegal procedure call",a);break;
+        case 17:printf("error in line %d,undeclared value\n",a);break;
         default:break;
     }
     err++;
@@ -652,7 +654,93 @@ void condition(){
     }
     listcode(1,0,a);
 }///conditon
-void expression(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
+void untoken(symbol token){
+    int k;
+    for(k=strlen(token.name);k>0;k--){
+        ungetc(token.name[k-1],fin);
+    }
+}
+
+void factor(){
+    int i;
+    token = get_sym();
+    if(strcmp(token.type, "char") == 0){
+        listcode(0, 0, token.value);
+    }
+    else if(strcmp(token.type, "real") == 0){
+        listcode(0, 0, token.value);
+    }
+    else if(strcmp(token.type, "integer") == 0){
+        listcode(0, 0, token.value);
+    }
+    else if(strcmp(token.type, "ident") == 0){
+        i = position(0,token);
+        if(i<0){
+            error(num_l,17);
+        }
+        else if(strcmp(syms[i].kind,"function")==0){
+            func_dec();
+        }
+        else {
+            //超出id0范围没考虑；
+            i = position(id0, token);
+            if(i < 0){
+                error(num_l, 17);
+            }
+            if(strcmp(syms[i].kind,"array")==0){
+                token = get_sym();//[
+                expression();
+                token = get_sym();//]
+                listcode(12, 0, syms[i].)
+            }
+            else｛
+                listcode(2, 0, )
+                ｝
+        }
+    }
+
+
+
+}
+
+void item(){
+    int isDiv = 0;
+    factor();
+    token = get_sym();
+    while(strcmp(token.type,"multiplying") == 0){
+        if(token.name[0] == '/') isDiv = 1;
+        factor();
+        if(diDiv) listcode(1, 0, 3);
+        else listcode(1, 0, 2);
+    }
+    untoken();
+}
+
+void expresion(){
+    int isNeg = 0;
+    token = get_sym();
+    if(strcmp(token.type, "adding") == 0){
+        listcode(0, 0, 0);
+        if(token.name[0] == '-') isNeg = 1; 
+    }
+    else untoken(token);
+    term();
+    if(isNeg) listcode(1, 0, 1);
+    else listcode(1, 0, 0);
+    token = get_sym();
+    while(strcmp(token.type, "adding") == 0){
+        isNeg = 0;
+        if(token.name[0] == '-') isNeg = 1;
+        term();
+        if(isNeg) listcode(1, 0, 1);
+        else listcode(1, 0, 0);
+    }
+    untoken(token);
+}
+
+
+
+void expression_ori(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
     symbol token,token1;    //这个问题里最重要的还是找出表达式的边界
     symbol ops[20];
     int i = 0;
@@ -1021,23 +1109,23 @@ int search_rword(char* s){//保留字数组为字典序
     return -1;
 }///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
-void listcode(int a,int b,int c){
+void listcode(int a,int b,float c){
     switch(a){
-        case 0:codes[p0]=LIT;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("LIT");break;
-        case 1:codes[p0]=OPR;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("OPR");break;
-        case 2:codes[p0]=LOD;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("LOD");break;
-        case 3:codes[p0]=STO;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("STO");break;
-        case 4:codes[p0]=CAL;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("CAL");break;
-        case 5:codes[p0]=CLL;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("CLL");break;
-        case 6:codes[p0]=ADD;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("ADD");break;
-        case 7:codes[p0]=JMP;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("JMP");break;
-        case 8:codes[p0]=JPC;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("JPC");break;
-        case 9:codes[p0]=RED;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("RED");break;
-        case 10:codes[p0]=WRT;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("WRT");break;
-        case 11:codes[p0]=END;operand[p0][0]=b;operand[p0][1]=c;p0++;printf("END");break;
+        case 0:codes[p0]=LIT;operand1[p0]=b;operand2[p0]=c;p0++;printf("LIT");break;
+        case 1:codes[p0]=OPR;operand1[p0]=b;operand2[p0]=c;p0++;printf("OPR");break;
+        case 2:codes[p0]=LOD;operand1[p0]=b;operand2[p0]=c;p0++;printf("LOD");break;
+        case 3:codes[p0]=STO;operand1[p0]=b;operand2[p0]=c;p0++;printf("STO");break;
+        case 4:codes[p0]=CAL;operand1[p0]=b;operand2[p0]=c;p0++;printf("CAL");break;
+        case 5:codes[p0]=CLL;operand1[p0]=b;operand2[p0]=c;p0++;printf("CLL");break;
+        case 6:codes[p0]=ADD;operand1[p0]=b;operand2[p0]=c;p0++;printf("ADD");break;
+        case 7:codes[p0]=JMP;operand1[p0]=b;operand2[p0]=c;p0++;printf("JMP");break;
+        case 8:codes[p0]=JPC;operand1[p0]=b;operand2[p0]=c;p0++;printf("JPC");break;
+        case 9:codes[p0]=RED;operand1[p0]=b;operand2[p0]=c;p0++;printf("RED");break;
+        case 10:codes[p0]=WRT;operand1[p0]=b;operand2[p0]=c;p0++;printf("WRT");break;
+        case 11:codes[p0]=END;operand1[p0]=b;operand2[p0]=c;p0++;printf("END");break;
         default:break;
     }
-    printf(" %d %d\n",b,c);///用于测试
+    printf(" %d %f\n",b,c);///用于测试
 }
 
 int main(){
