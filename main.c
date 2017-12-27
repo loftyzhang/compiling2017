@@ -43,6 +43,7 @@ int num_l = 0;//行数
 int num_i = 0;//符号表项数
 int num_b = 0;///begin和end对数
 int num_p = 0;///小括号的对数
+int num_d = 0;///层次
 int addr = 0;///虚拟地址空间中的地址
 int addr0 = 0;///基地址，主要用于各种声明场合
 int id   = 0;//某元素在符号表中地址
@@ -76,6 +77,7 @@ typedef struct sym{
     char type[20];//类型int char string float
     char kind[20];//array func pro const var///这个 地方是为了这类特别的元素准备的，其他统称normal，这一位置只需在声明语句中初始化，
     float value;//值
+    int depth;
     int level;///所属分程序的起始地址
     int addr;///这里对过程和函数是起始地址，对其内部声明的量是相对地址。
 }symbol;//这里只记录symbol的名称和类型，若为变量或常量则以浮点数形式记录其值，字符保存的是ascii码
@@ -272,6 +274,7 @@ void const_dec(symbol sym){
     strcpy(token.kind,"const");
     token.value = token1.value;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
     token.level = id0;///记录声明位置
+    token.depth = num_d;
     token.addr = addr;
     vm[addr] = token.value;
     addr = addr + 1;
@@ -295,6 +298,7 @@ int var_dec(symbol sym){
     }
     strcpy(token.name,sym.name);
     token.level = id0;
+    token.depth = num_d;
     token.addr = addr;
     strcpy(token.type,"unknown");////这里暂时不清楚变量类型，为便于处理多个变量的声明，先放一个在这
     syms[num_i++] = token;
@@ -303,6 +307,7 @@ int var_dec(symbol sym){
     while(token1.name[0]==44){//逗号
         token1 = get_sym();//下一个变量
         token1.level = id0;
+        token1.depth = num_d;
         token1.addr = addr;
         strcpy(token1.type,"unknown");
         syms[num_i++] = token1;
@@ -365,6 +370,7 @@ void pro_dec(symbol sym){
     symbol token;
     symbol token1;
     int n = 0;
+    num_d ++;
     id0 = num_i;
     addr0 = addr;
     token = sym;
@@ -372,6 +378,7 @@ void pro_dec(symbol sym){
     strcpy(token.kind,"procedure");///过程没有返回值，故type和kind相同
     token.value = 0;///这里应该是函数在指令序列中的起始位置
     token.level = id0;
+    token.depth = num_d;
     token.addr = addr0;///对于procedure这个地址中是没有值的
     vm[addr] = 0;
     addr++;
@@ -400,13 +407,17 @@ void pro_dec(symbol sym){
             break;
         }
     }//对分程序部分进行分析
+    listcode(6,0,syms[id0+1].value);///POP操作，将运行栈复原。
+    syms[id0].level = num_i;//保留当前模块的符号表结尾位置
     id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
-    listcode(11,0,1);//结束语句
+    listcode(11,0,1);//结束语句,结束语句对应包括记录bp、lbp、ip以及返回值在内的多种操作
+    num_d--;
 }///pro_dec、有关空间申请的指令都在其中调用的语句分析中进行，由于函数调用时参数表已经单独处理，故不再进行空间申请。
 void func_dec(symbol sym){
     symbol token;
     symbol token1;
+    num_d++;
     addr0 = addr;
     id0 = num_i;
     int n = 0;
@@ -414,6 +425,7 @@ void func_dec(symbol sym){
     strcpy(token.kind,"function");//这里得到了函数名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
     token.level = id0;
+    token.depth = num_d;
     token.addr = addr;///这里保存的是function的返回值
     vm[addr] = 0;
     addr++;
@@ -444,9 +456,12 @@ void func_dec(symbol sym){
             break;
         }
     }//对分程序部分进行分析
+    listcode(6,0,syms[id0+1].value);//pop以保证栈平衡
+    syms[id0].level = num_i;///保存函数的符号表结尾
     id0 = num_i;
     addr0 = addr;//函数段结束，基地址复位
     listcode(11,0,2);
+    num_d--;
 }//func_dec
 void pro_call(int n){
     symbol token;
@@ -740,7 +755,7 @@ void expresion(){
 
 
 
-void expression_ori(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
+void expression_oom(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
     symbol token,token1;    //这个问题里最重要的还是找出表达式的边界
     symbol ops[20];
     int i = 0;
@@ -850,10 +865,10 @@ void expression_ori(){////想了想我觉得还是把中缀变后缀的好，然
         }
         token = get_sym();
     }
-    get_expre();
+    //?get_expre();
 }///这还需要注意的是，对于数组下标位置上的表达式，可以使用递归的方法分析，对于小括号则不应该递归调用此函数
 
-void get_expre(){
+/*void get_expre(){
     //symbol token;
     int i = suf_i;
     int j = 0;
@@ -861,7 +876,7 @@ void get_expre(){
         printf("%s\n",suf[j].name);
         suf[j].name[0] = '\0';
     }
-}
+}*/
 
 symbol get_sym(){
     symbol token;
@@ -1084,13 +1099,53 @@ symbol get_sym(){
 
  int position(int b,symbol sym){//在符号表中寻找当前标识符
     int i = 0;
-    for(i = b;i<num_i;i++){
-        if(strcmp(sym.name,syms[i].name)==0){
-            return i;
-        }////一种可以考虑的办法是给出一个查找起点，用于解决不同层次间变量同名可能带来的问题
+    int j = sym.depth;
+    if(b==0){///从头查找的是函数或者过程，过程和函数不应该会重名
+        for(i = b;i<num_i;i++){
+            if(strcmp(sym.name,syms[i].name)==0){
+                return i;
+            }////一种可以考虑的办法是给出一个查找起点，用于解决不同层次间变量同名可能带来的问题
+        }
+    }
+    else if(syms[b].level = b){//这里表明过程或函数的声明没有结束
+         i = num_i-1;
+         while(i>=0){
+            if(syms[i].depth==j){
+                if(strcmp(sym.name,syms[i].name)==0){
+                    break;
+                }
+            }
+            else if(syms[i].depth<j){
+                j = j-1;
+                if(strcmp(sym.name,syms[i].name)==0){
+                    break;
+                }
+            }
+            i = i-1;
+        }
+    }
+    else{
+        i = syms[b].level;//取当前模块的结尾当做检索起始
+        while(i>=0){
+            if(syms[i].depth==j){
+                if(strcmp(sym.name,syms[i].name)==0){
+                    break;
+                }
+            }
+            else if(syms[i].depth<j){
+                j = j-1;
+                if(strcmp(sym.name,syms[i].name)==0){
+                    break;
+                }
+            }
+            i = i-1;
+        }
+    }
+    if(j>sym.depth-2){//判断查询结果是否复合解释执行算法，即调用层次差是否超过一级
+        return i;
     }
     return -1;
- }
+ }//position();
 
 int search_rword(char* s){//保留字数组为字典序
     int high,low,mid;
