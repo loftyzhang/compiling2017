@@ -88,7 +88,7 @@ symbol suf[100];///suffix expression 保存作为转换结果的后缀表达式
 void error(int a ,int b);
 int statement();
 void const_dec(symbol sym);
-void var_dec(symbol sym);
+int var_dec(symbol sym);
 void pro_dec(symbol sym);
 void func_dec(symbol sym);
 void pro_call(int n);
@@ -102,7 +102,7 @@ void condition();
 void expression();//表达式，这里是做一个中缀变后缀的转换，然后计算后缀表达式。用于保存后缀表达式的栈不必是全局变量。
 void get_expre();///将表达式转为指令
 symbol get_sym();
-void listcode(enum code a,int b,int c);///a,b,c对应一条指令的三个参数
+void listcode(enum code a,int b,float c);///a,b,c对应一条指令的三个参数
 int position(int b,symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 void interret();///解释执行
@@ -124,7 +124,7 @@ void interpret(){
         if(codes[ip]==LIT){
             stack[tp++] = a;//将常数移动到栈顶
             ip++;
-            continue;   
+            continue;
         }
         else if(codes[ip]==OPR){
             switch((int)operand2[ip]){
@@ -187,12 +187,25 @@ void interpret(){
             else ip++;///条件未通过时跳转
             continue;
         }
-        else if(codes[ip]==RED){
-            /////由于未区分数据类型，可能导致一些问题
+        else if(codes[ip]==RED){/////由于未区分数据类型，可能导致一些问题
+            if(l){
+                if(stack[tp-1]==1) scanf("%d",&stack[lbp+a]);
+                else if(stack[tp-1]==2) scanf("%f",&stack[lbp+a]);
+                else if(stack[tp-1]==3) scanf("%c",&stack[lbp+a]);
+            }
+            else{
+                if(stack[tp-1]==1) scanf("%d",&stack[bp+a]);
+                else if(stack[tp-1]==2) scanf("%f",&stack[bp+a]);
+                else if(stack[tp-1]==3) scanf("%c",&stack[bp+a]);
+            }
+            ip++;
+            tp--;///栈顶表示数据类型
             continue;
         }
-        else if(codes[ip]==WRT){
-            ///由于未标识数据类型，肯定存在问题
+        else if(codes[ip]==WRT){///栈顶内容数据类型未知
+            if(a==-1) printf("%f",stack[--tp]);
+            else printf("%s",syms[--num_i].name);
+            ip++;
             continue;
         }
         else if(codes[ip]==END){
@@ -246,6 +259,7 @@ void error(int a,int b){
         case 15:printf("error in line %d,unpaired parens\n",a);break;
         case 16:printf("error in line %d,illegal procedure call",a);break;
         case 17:printf("error in line %d,undeclared value\n",a);break;
+        case 18:printf("error in line %d,illegal reading statement\n",a);break;
         default:break;
     }
     err++;
@@ -343,7 +357,7 @@ int statement(symbol sym){
                 token = get_sym();///等号
                 if(token.name[0]=='('){//单独的函数调用语句
                     ungetc(40,fin);
-                    func_call();
+                    func_call(i);
                     token = get_sym();//分号
                     return 0;///单独的函数调用语句
                 }
@@ -410,7 +424,7 @@ int var_dec(symbol sym){
     int j = 0;
     if(strcmp(sym.type,"ident")!=0){
         error(num_l,10);///变量名非法或为空
-        return;
+        return 0;
     }
     strcpy(token.name,sym.name);
     token.level = id0;
@@ -500,7 +514,7 @@ void pro_dec(symbol sym){
     syms[num_i++] = token;//将过程登记入符号表
     num_d++;//层次加一
     syms[num_i] = zero;///这里保存参数个数，用零占位
-    syms[num+i++].depth = num_d;
+    syms[num_i++].depth = num_d;
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
         token1 = get_sym();
@@ -587,7 +601,7 @@ void pro_call(int n){
     symbol token;
     id0 = n;//设当前模块起始为基地址
     int i = 0;
-    int j = 0;
+    //int j = 0;
     int p = 0;
     p = (int)syms[n].value;///记录函数入口
     token = get_sym();//开始参数表部分(40 41 91 93
@@ -624,22 +638,21 @@ void func_call(int n){//应包括跳转和将参数加载到运行栈两部分�
 }
 void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
     symbol token;
-    //symbol token1;
     int i = 0;
-    int j = 0;
     token = get_sym();///肯定是括号了
     while(token.name[0]!=41){////右括号
         token = get_sym();
         i = position(id0,token);////定位
         if(strcmp(syms[i].kind,"array")==0){
-            token = get_sym();//[
-            token = get_sym();//下标
-            j = (int)token.value;
-            token = get_sym();
+            error(num_l,18);
+            while(token.name[0]!=';') token = get_sym();
+                return;
         }
-        listcode(RED,syms[id0].depth-syms[i].depth,i+j-syms[id0].vlaue-1);///通过相对地址找到目标位置，下同。
-        i = 0;
-        j = 0;///复位
+        if(strcmp(token.type,"integer")==0) listcode(LIT,0,1);
+        else if(strcmp(token.type,"real")==0) listcode(LIT,0,2);
+        else if(strcmp(token.type,"char")==0) listcode(LIT,0,3);
+        listcode(RED,syms[id0].depth-syms[i].depth,i-syms[id0].value-1);///通过相对地址找到目标位置，下同。
+        i = 0;///复位
     }
     token = get_sym();///分号
 }////reading
@@ -690,7 +703,7 @@ void if_state(){
     while(num_b!=n);///根据begin-end是否匹配判定then后语句是否结束，同时解决了普通语句及复合语句
     token = get_sym();//判断是否有else分支
     if(strcmp(token.name,"else")==0){
-        operand[source][1] = p0+1;//跳转到跳过else分支的语句之后即跳转到else分支
+        operand2[source] = p0+1;//跳转到跳过else分支的语句之后即跳转到else分支
         source = p0;//记录跳转语句位置
         listcode(JMP,0,0);//跳过else分支的语句
         do{
@@ -698,10 +711,10 @@ void if_state(){
             statement(token);
         }
         while(num_b!=n);///根据begin-end是否匹配判定else后语句是否结束，同时解决了普通语句及复合语句
-        operand[source][1] = p0;///补全跳过else分支的语句
+        operand2[source] = p0;///补全跳过else分支的语句
     }
     else{//若没有else分支
-        operand[source][1] = p0;///若无else分支则跳过then分支
+        operand2[source] = p0;///若无else分支则跳过then分支
         for(i=strlen(token.name);i>0;i--){
             ungetc(token.name[i-1],fin);////把多读的字符退回
         }
@@ -797,6 +810,7 @@ void untoken(symbol token){
 }
 
 void factor(){
+    symbol token;
     int i;
     int j;
     token = get_sym();
@@ -815,7 +829,12 @@ void factor(){
             error(num_l,17);
         }
         else if(strcmp(syms[i].kind,"function")==0){
-            func_dec();
+            func_call(i);
+        }
+        else if(strcmp(syms[i].kind,"const")==0){
+            i = position(id0,token);
+            i = syms[i].value;
+            listcode(LIT,0,i);
         }
         else {
             i = position(id0, token);
@@ -854,34 +873,36 @@ void factor(){
 }
 
 void item(){
+    symbol token;
     int isDiv = 0;
     factor();
     token = get_sym();
     while(strcmp(token.type,"multiplying") == 0){
         if(token.name[0] == '/') isDiv = 1;
         factor();
-        if(diDiv) listcode(OPR, 0, 3);
+        if(isDiv) listcode(OPR, 0, 3);
         else listcode(OPR, 0, 2);
     }
-    untoken();
+    //untoken();
 }
 
-void expresion(){
+void expression(){
+    symbol token;
     int isNeg = 0;
     token = get_sym();
     if(strcmp(token.type, "adding") == 0){
         listcode(LIT, 0, 0);
-        if(token.name[0] == '-') isNeg = 1; 
+        if(token.name[0] == '-') isNeg = 1;
     }
     else untoken(token);
-    term();
+    item();
     if(isNeg) listcode(OPR, 0, 1);
     else listcode(OPR, 0, 0);
     token = get_sym();
     while(strcmp(token.type, "adding") == 0){
         isNeg = 0;
         if(token.name[0] == '-') isNeg = 1;
-        term();
+        item();
         if(isNeg) listcode(OPR, 0, 1);
         else listcode(OPR, 0, 0);
     }
@@ -1234,7 +1255,9 @@ symbol get_sym(){
             }////一种可以考虑的办法是给出一个查找起点，用于解决不同层次间变量同名可能带来的问题
         }
     }
-    else if(syms[b].level = b) i = num_i-1; //这里表明过程或函数的声明没有结束
+    else if(syms[b].level == b){
+        i = num_i-1; //这里表明过程或函数的声明没有结束
+    }
     else i = syms[b].level;///好像这种情况并不存在
         //取当前模块的结尾当做检索起始
     while(i>=0){
@@ -1299,23 +1322,6 @@ void listcode(enum code a,int b,float c){
     printf(" %d %f\n",b,c);///用于测试
 }
 
-void interpret(){
- //p1;//初始情况下这个是程序入口
- //p0;//初始情况下这个是程序结尾
-    int ip = 0;
-    int bp = 0;///当前分程序数据区的起始地址
-    int lbp = 0;///上一分程序的数据区基地址
-    float run_stack[100]={0};///运行栈
-    while(ip!=p0){
-        if(codes[ip]==LIT){
-            continue;   
-        }
-        else if(codes[ip]==OPR){
-            continue;
-        }
-        else if(codes[ip]==)
-    }
-}
 
 int main(){
     char fname[100];//文件路径
@@ -1359,7 +1365,7 @@ int main(){
         //fprintf(fout,"%d %s %s\n",num_t,token0.type,token0.name);
         //printf("%d\n",i);
     }
-    
+
     printf("end of file");
     interpret();
     fclose(fin);
@@ -1367,4 +1373,3 @@ int main(){
 
     return 0;
 }
-
