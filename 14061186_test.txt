@@ -1,6 +1,7 @@
 const r = 1406;
 var   num:array[5]of integer;
 var   i:integer;average:real;
+var   a,b,c,d,e:integer;
 procedure sorting (var n:integer);
 	var i,j,t:integer;
 	begin
@@ -32,7 +33,12 @@ function getaverage (var nn:integer):real;
 begin
 	i:=0;
 	write("please input five numbers/n");
-	read(num[0],num[1],num[2],num[3],num[4]);
+	read(a,b,c,d,e);
+	num[0] = a;
+	num[1] = b;
+	num[2] = c;
+	num[3] = d;
+	num[4] = e;
 	sorting(i);
 	average = getaverage(i);
 	write("here are the results:/n");

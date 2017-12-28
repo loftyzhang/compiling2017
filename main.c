@@ -203,8 +203,8 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==WRT){///栈顶内容数据类型未知
-            if(a==-1) printf("%f",stack[--tp]);
-            else printf("%s",syms[--num_i].name);
+            if(a==-1) fprintf(fin,"%f",stack[--tp]);
+            else fprintf(fin,"%s",syms[--num_i].name);
             ip++;
             continue;
         }
@@ -883,7 +883,7 @@ void item(){
         if(isDiv) listcode(OPR, 0, 3);
         else listcode(OPR, 0, 2);
     }
-    //untoken();
+    untoken(token);
 }
 
 void expression(){
@@ -908,122 +908,6 @@ void expression(){
     }
     untoken(token);
 }
-
-
-
-/*void expression_poland(){////想了想我觉得还是把中缀变后缀的好，然后比较方便生成目标码
-    symbol token,token1;    //这个问题里最重要的还是找出表达式的边界
-    symbol ops[20];
-    int i = 0;
-    int j = 0;
-    int k = 0;
-    char c = '\0';
-    int ad = 0;
-    //int op = 1;///用于正负的标识，注意测试样例中不会出现多个连续的正负号
-    //int lp = 0;//运算符栈中左括号的数量，用于判断表达式结尾。
-    c = fgetc(fin);//用于判断
-    if(c == '-'){
-        suf[suf_i++] = zero;
-        ungetc(c,fin);
-        token = get_sym();
-        ops[j++] = token;//若为负号则添加一个零和一个减法
-        token = get_sym();
-    }
-    else if(c == '+'){
-        token = get_sym();//正号忽略
-    }
-    else{
-        ungetc(c,fin);//若无前导符号则退回，读取第一个标识符
-        token = get_sym();
-    }
-    while(1){
-        if((strcmp(token.type,"relation")==0)||(strcmp(token.type,"rword")==0)){////这里用于条件等语句
-            for(k=strlen(token.name);k>0;k--){
-                ungetc(token.name[k-1],fin);
-            }
-            break;
-        }
-        else if(token.name[0]==93){//表达式结束]
-            for(k=0;k<suf_i;k++){
-                if(suf[k].name[0]==91){//表明当前表达式是数组下标，不应该进行代码生成，直接结束函数
-                    suf[suf_i++] = token;///保存边界
-                    return;
-                }
-            }
-            if(k==suf_i){
-                error(num_l,15);
-            }
-        }
-        else if(token.name[0]==59){////分号，表达式结束
-            ungetc(59,fin);
-            break;
-        }
-        else if(token.name[0]==41){///括号比较特殊，需要判断括号是否来自表达式
-            token1 = get_sym();
-            if(token1.name[0]==59){
-                ungetc(59,fin);
-                ungetc(41,fin);//此时说明是写语句结尾的括号，将括号分号退回
-            }
-            else{///表达式中括号需要将栈中内容弹出
-                for(j = j-1;(ops[i].name[0]!=40)&&j>=0;j--){
-                    suf[suf_i++] = ops[j];
-                }///这里j没有再减一，相当于将左括号弹出。
-                num_p--;
-                if(j<0){
-                    error(num_l,15);
-                    c = fgetc(fin);
-                    while(c!=59){
-                        c = fgetc(fin);
-                    }
-                }
-            }
-        }
-        else if(strcmp(token.type,"real")==0||(strcmp(token.type,"integer")==0)){//若为数字，即若为常量，直接入栈
-            suf[i++] = token;
-        }
-        else if(strcmp(token.type,"ident")==0){//若为标识符，则需判断是常量、变量、数组，或是函数调用
-            ad = position(addr0,token);
-            if(strcmp(syms[ad].kind,"array")==0){
-                suf[suf_i++] = syms[ad];
-                token = get_sym();
-                suf[suf_i++] = token;//将中括号保存在结果中用于标识数组下标的边界
-                expression();///这里假设不会发生中括号的嵌套
-                token = get_sym();
-                suf[suf_i++] = token;//]作为数组元素标识符结束的标记
-            }
-            else if(strcmp(syms[ad].kind,"function")==0){
-                suf[suf_i++] = syms[ad];///函数名
-                func_call(ad);
-            }
-            else{
-                suf[suf_i++] = syms[ad];
-            }
-        }
-        else if(token.name[0]==40){///(
-            ops[j++] = token;//小括号直接进
-            num_p++;
-        }
-        else if(token.name[0]=='*'||token.name[0]=='/'){//由于只有两种优先级，故乘除法直接进
-            ops[j++] = token;
-        }
-        else if(token.name[0]=='+'||token.name[0]=='-'){//由于只有两种优先级，故加减法在不为空且栈顶不是括号的时候直接弹出
-            for(j=j-1;(ops[j].name[0]!='(')&&(j>=0);j--){
-                    suf[suf_i++] = ops[j];
-            }
-            j++;
-            ops[j++] = token;///弹出之后把自己放进去，若未进行弹出即未进入循环直接压入
-        }
-        else{
-            error(num_l,6);
-            while((c=fgetc(fin))!=59){
-                c = fgetc(fin);//跳过当前行
-            }
-        }
-        token = get_sym();
-    }
-
-}///这还需要注意的是，对于数组下标位置上的表达式，可以使用递归的方法分析，对于小括号则不应该递归调用此函数
-*/
 
 
 symbol get_sym(){
