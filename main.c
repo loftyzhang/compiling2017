@@ -18,6 +18,7 @@
 
 #define norw 21//number of reserved words
 FILE* fin;
+FILE* fout;
 
 enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT,END,LDD,SDD};
 /*lit 取常量到栈顶
@@ -203,8 +204,8 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==WRT){///栈顶内容数据类型未知
-            if(a==-1) fprintf(fin,"%f",stack[--tp]);
-            else fprintf(fin,"%s",syms[--num_i].name);
+            if(a==-1) fprintf(fout,"%f",stack[--tp]);
+            else fprintf(fout,"%s",syms[--num_i].name);
             ip++;
             continue;
         }
@@ -366,23 +367,36 @@ int statement(symbol sym){
                 token = get_sym();//分号
                 return 0;
             }//若为函数或过程则为调用语句，否则是赋值语句
+            else{
+                token = get_sym();
+                if(strcmp(token.type,"assignment")==0){///赋值语句肯定是分号结尾没跑了
+                    printf("this is a assignment statement!\n");
+                    expression();
+                    //printf("CUR_SYM:%s\n",sym.name);
+                    i = position(id0,sym);
+                    //j = syms[id0+1].value;//取参数个数
+                    if(i>=0){///由于是赋值语句，不涉及对参数的赋值
+                        listcode(STO,num_d-syms[i].depth,i-id0-1);///根据偏移量保存值
+                    }
+                    else{
+                        error(num_l,6);
+                        //printf("i=%d\n",(int)i);
+                        //printf("%s %s\n",syms[2].name,syms[id0-1].name);
+
+                        /*while(token.name[0]!=';'){
+                            token = get_sym();
+                        }*/
+                    }
+                    token = get_sym();//分号
+                    return 0;
+                }////这里还需要判断是否为函数或过程的调用语句
+            }
         }
-        else{//一般的赋值语句,需要判断该标识符是否是属于当前层次的
-            token = get_sym();
-            if(strcmp(token.type,"assignment")==0){///赋值语句肯定是分号结尾没跑了
-                printf("this is a assignment statement!\n");
-                expression();
-                i = position(id0,sym);
-                j = syms[id0+1].value;//取参数个数
-                if(i>=0){///由于是赋值语句，不涉及对参数的赋值
-                    listcode(STO,syms[id0].depth-syms[i].depth,i-id0-1);///根据偏移量保存值
-                }
-                else{
-                    error(num_l,6);
-                }
-                token = get_sym();//分号
-                return 0;
-            }////这里还需要判断是否为函数或过程的调用语句
+        else{//feifa
+            error(num_l,6);
+            /*while(token.name[0]!=';'){
+                token = get_sym();
+            }*/
         }
     }
     return -1;
@@ -500,6 +514,7 @@ void pro_dec(symbol sym){
     symbol token;
     symbol token1;
     int n = 0;
+    int cur_level_args_size = 0;
     id0 = num_i;
     addr0 = addr;
     token = sym;
@@ -521,6 +536,7 @@ void pro_dec(symbol sym){
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
             n = var_dec(token1);///解决了整个参数表
+            cur_level_args_size = n;
             token1 = get_sym();//分号
         }
         else{
@@ -542,7 +558,7 @@ void pro_dec(symbol sym){
     syms[id0].level = num_i;//保留当前模块的符号表结尾位置
     id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
-    listcode(END,0,1);//结束语句,结束语句对应包括记录bp、lbp、ip以及返回值在内的多种操作
+    listcode(END,cur_level_args_size,1);//结束语句,结束语句对应包括记录bp、lbp、ip以及返回值在内的多种操作
     num_d--;
     p1 = p0;///用于寻找程序入口
 }///pro_dec、有关空间申请的指令都在其中调用的语句分析中进行，由于函数调用时参数表已经单独处理，故不再进行空间申请。
@@ -552,6 +568,7 @@ void func_dec(symbol sym){
     addr0 = addr;
     id0 = num_i;
     int n = 0;
+    int cur_level_args_size = 0;
     token = sym;
     strcpy(token.kind,"function");//这里得到了函数名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
@@ -570,6 +587,7 @@ void func_dec(symbol sym){
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
             n = var_dec(token1);///解决整个参数表
+            cur_level_args_size = n;
             token1 = get_sym();//冒号
         }
         else{
@@ -589,11 +607,11 @@ void func_dec(symbol sym){
             break;
         }
     }//对分程序部分进行分析
-    listcode(ADD,0,syms[id0+1].value);//pop以保证栈平衡
+    //listcode(ADD,0,syms[id0+1].value);//pop以保证栈平衡
     syms[id0].level = num_i;///保存函数的符号表结尾
     id0 = num_i;
     addr0 = addr;//函数段结束，基地址复位
-    listcode(END,0,2);
+    listcode(END,cur_level_args_size,2);
     num_d--;
     p1 = p0;//用于寻找程序入口
 }//func_dec
@@ -612,9 +630,13 @@ void pro_call(int n){
             token = get_sym();
         }
     }
+    if(i != (int)(syms[n + 1].value)){
+        error(num_l, 16);
+    }
     token = get_sym();///分号
-    listcode(ADD,0,i);//为参数申请空间
+    //listcode(ADD,0,i);//为参数申请空间
     listcode(CLL,0,p);//过程调用语句这里好像调用和跳转没啥区别。
+
     id0 = id00;///复位
 }////在这一部分首先需要把实际参数加载入数据栈，然后再跳转，这里lod之前应该进行地址的声明
 void func_call(int n){//应包括跳转和将参数加载到运行栈两部分，仅处理到参数表结束
@@ -632,8 +654,12 @@ void func_call(int n){//应包括跳转和将参数加载到运行栈两部分�
             token = get_sym();
         }
     }
-    listcode(ADD,0,i);///为参数申请空间
+    if(i != (int)(syms[n + 1].value)){
+        error(num_l, 9);
+    }
+    //listcode(ADD,0,i);///为参数申请空间
     listcode(CAL,0,p);///函数调用
+
     id0 = id00;
 }
 void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
@@ -643,16 +669,25 @@ void reading(){///基于基地址进行变量的查找和赋值，变量名可�
     while(token.name[0]!=41){////右括号
         token = get_sym();
         i = position(id0,token);////定位
-        if(strcmp(syms[i].kind,"array")==0){
-            error(num_l,18);
-            while(token.name[0]!=';') token = get_sym();
-                return;
+        if(i >= 0){
+            if(strcmp(syms[i].kind,"array")==0){
+                error(num_l,18);
+                while(token.name[0]!=';') token = get_sym();
+                    return;
+            }
+
+            if(strcmp(syms[i].type,"integer")==0) listcode(LIT,0,1);
+            else if(strcmp(syms[i].type,"real")==0) listcode(LIT,0,2);
+            else if(strcmp(syms[i].type,"char")==0) listcode(LIT,0,3);
+            listcode(RED,syms[id0].depth-syms[i].depth,i-syms[id0].value-1);///通过相对地址找到目标位置，下同。
+            i = 0;///复位
+        }else{
+            error(num_l, 17);
         }
-        if(strcmp(token.type,"integer")==0) listcode(LIT,0,1);
-        else if(strcmp(token.type,"real")==0) listcode(LIT,0,2);
-        else if(strcmp(token.type,"char")==0) listcode(LIT,0,3);
-        listcode(RED,syms[id0].depth-syms[i].depth,i-syms[id0].value-1);///通过相对地址找到目标位置，下同。
-        i = 0;///复位
+        token = get_sym();
+        if(token.name[0] != ',' && token.name[0] != ')'){
+            error(num_l, 18);
+        }
     }
     token = get_sym();///分号
 }////reading
@@ -665,6 +700,7 @@ void writing(){
     if(c==34){
         ungetc(c,fin);
         token = get_sym();//字符串
+        //printf("%s\n",token.name);
         syms[num_i++] = token;
         listcode(WRT,0,num_i-1);///字符串录入符号表后根据其地址进行输出。
         token = get_sym();
@@ -673,17 +709,11 @@ void writing(){
             token = get_sym();///括号
         }
     }
-    else if((c>'0'&&c<'9')||(c>'a'&&c<'z')||(c>'A'&&c<'Z')){//若c是字母或数字则是表达式的开头
-        ungetc(c,fin);
-        expression();///不是字符串就是表达式
-        listcode(WRT,0,-1);///表达式则输出栈顶元素
-        token = get_sym();//应该是括号
-    }
-    else{//非法
-        error(num_l,6);
-        while(c!=59){
-            c= fgetc(fin);
-        }
+    else{
+        ungetc(c, fin);
+        expression();
+        listcode(WRT, 0, -1);
+        token = get_sym();
     }
     token = get_sym();///语句结尾是分号
 }////writing
@@ -869,9 +899,12 @@ void factor(){
             }
         }
     }
-    else if(token.name[0]==40){
+    else if(token.name[0]==40||token.name[0]==91){
         expression();
-        token = get_sym();///)
+        token = get_sym();///(   [
+    }
+    else if(token.name[0]==59||token.name[0]==41||token.name[0]==93){
+        untoken(token);
     }
     else if(strcmp(token.type,"rword")==0){
         untoken(token);///表达式后接保留字，如for语句
@@ -892,6 +925,7 @@ void item(){
         factor();
         if(isDiv) listcode(OPR, 0, 3);
         else listcode(OPR, 0, 2);
+        token = get_sym();
     }
     untoken(token);
 }
@@ -1149,18 +1183,18 @@ symbol get_sym(){
  int position(int b,symbol sym){//在符号表中寻找当前标识符
     int i = 0;
     int j = sym.depth;
-    if(b==0){///从头查找的是函数或者过程，过程和函数不应该会重名
+    /*if(b==0){///从头查找的是函数或者过程，过程和函数不应该会重名
         for(i = b;i<num_i;i++){
             if(strcmp(sym.name,syms[i].name)==0){
                 return i;
             }////一种可以考虑的办法是给出一个查找起点，用于解决不同层次间变量同名可能带来的问题
         }
-    }
-    else if(syms[b].level == b){
-        i = num_i-1; //这里表明过程或函数的声明没有结束
-    }
-    else i = syms[b].level;//取当前模块的结尾当做检索起始
+    }*/
+    i = num_i-1;
+    //printf("CHECK:%s %s\n",syms[2].name,sym.name);
     while(i>=0){
+        //printf("III: %d %d\n",i,j);
+         //if (i == 2) printf("FLAG: %s %s",syms[i].name,sym.name);
         if(syms[i].depth==j){
             if(strcmp(sym.name,syms[i].name)==0){
                 break;
@@ -1174,10 +1208,13 @@ symbol get_sym(){
         }
         i = i-1;
     }
-    if(j>sym.depth-2){//判断查询结果是否复合解释执行算法，即调用层次差是否超过一级
+    if(strcmp(syms[i].kind, "procedure") == 0 || strcmp(syms[i].kind, "function") == 0){
         return i;
     }
-    return -1;
+    else if(j>sym.depth-2){//判断查询结果是否复合解释执行算法，即调用层次差是否超过一级
+        return i;
+    }
+    return -5;
  }//position();需要注意的是在使用查询结果之前仍然需要对层次差进行计算，参数相关的是层次差为零，偏移量为负
 
 int search_rword(char* s){//保留字数组为字典序
