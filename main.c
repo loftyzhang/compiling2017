@@ -39,7 +39,7 @@ int operand1[1000]={0};//pcode指令的操作数部分
 float operand2[1000] = {0.};
 int err = 0;//number of errors
 int num_t = 0;//读取的token数量
-int num_l = 0;//行数
+int num_l = 1;//行数
 int num_i = 0;//符号表项数
 int num_b = 0;///begin和end对数
 int num_p = 0;///小括号的对数
@@ -242,7 +242,7 @@ void interpret(){
 
 void error(int a,int b){
     switch(b){
-        case 1:printf("error in line %d,too long identifier\n",a);break;
+        case 1:printf("error in line %d,too long file\n",a);break;
         case 2:printf("error in line %d,illegal real input\n",a);break;
         case 3:printf("error in line %d,incompleted operator\n",a);break;
         case 4:printf("error in line %d,unpaired quotation marks\n",a);break;
@@ -740,25 +740,26 @@ void for_state(){
         listcode(OPR,0,1);
         listcode(LIT,0,-1);
         listcode(OPR,0,2);//结果乘以-1得到步长
-    }
+    }///得到了步长
     else{
         error(num_l,7);
-    }///判断步长是自增还是自减
+    }
     listcode(STO,0,a-id0-1-syms[id0+1].value);///保存步长，此后无论步长都是做自减
     c = p0;///保留循环入口指令地址
-    listcode(LIT,0,-1);
-    listcode(OPR,0,0);//步长自减
-    listcode(STO,0,a-id0-1-syms[id0+1].value);//保存新的步长
     token = get_sym();///do
     do{
         token = get_sym();
         statement(token);
     }
     while(num_b!=n);//根据begin-end是否匹配判定do后语句是否结束，同时解决了普通语句及复合语句
+    listcode(LOD,0,a-id0-1-syms[id0+1].value);
+    listcode(LIT,0,-1);
+    listcode(OPR,0,0);//步长自减
+    listcode(STO,0,a-id0-1-syms[id0+1].value);//保存新的步长
     listcode(LOD,0,a-id0-1-syms[id0+1].value);//取步长
-    listcode(LIT,0,0);///取零
-    listcode(OPR,0,8);//判断步长是否大于零
-    listcode(JPC,0,c);//若大于dengyu零则重新进入循环
+    listcode(LIT,0,0);//取零
+    listcode(OPR,0,4);//判断步长是否小于零
+    listcode(JPC,0,c);//若大于等于零则重新进入循环
 }//for_state
 void while_state(){////以do起始
     symbol token;
@@ -823,6 +824,9 @@ void factor(){
     else if(strcmp(token.type, "integer") == 0){
         listcode(LIT, 0, token.value);
     }
+    else if(strcmp(token.type,"relation")==0){
+        untoken(token);
+    }
     else if(strcmp(token.type, "ident") == 0){
         i = position(0,token);
         if(i<0){
@@ -852,7 +856,7 @@ void factor(){
                 else{//是参数
                     j = -j-4+i-id0-1;//-参数数-4-偏移
                 }
-                listcode(LDD,syms[id0].depth-syms[i].depth,j);
+                listcode(LDD,syms[id0].depth-syms[i].depth+1,j);
             }
             else{
                 if(i-id0-1>j){//不是参数,即为变量
@@ -861,7 +865,7 @@ void factor(){
                 else{//是参数
                     j = -j-4+i-id0-1;//-参数数-4-偏移
                 }
-                listcode(LOD,syms[id0].depth-syms[i].depth,j);
+                listcode(LOD,syms[id0].depth-syms[i].depth+1,j);///这里注意过程或函数的层次（id0的层次）与其中的变量的层次差1
             }
         }
     }
@@ -869,7 +873,13 @@ void factor(){
         expression();
         token = get_sym();///)
     }
-    else error(num_l,6);
+    else if(strcmp(token.type,"rword")==0){
+        untoken(token);///表达式后接保留字，如for语句
+    }
+    else{
+        printf("%s\n",token.name);
+        error(num_l,6);
+    }
 }
 
 void item(){
@@ -888,16 +898,21 @@ void item(){
 
 void expression(){
     symbol token;
-    int isNeg = 0;
+    int isNeg = -1;
     token = get_sym();
     if(strcmp(token.type, "adding") == 0){
         listcode(LIT, 0, 0);
+        isNeg = 0;
         if(token.name[0] == '-') isNeg = 1;
     }
-    else untoken(token);
+    else {
+            isNeg = -1;
+            untoken(token);
+    }
     item();
-    if(isNeg) listcode(OPR, 0, 1);
-    else listcode(OPR, 0, 0);
+    if(isNeg==1) listcode(OPR, 0, 1);
+    else if(isNeg==0) listcode(OPR,0,0);
+    else isNeg = 0;///当没有前导符号时什么也不做
     token = get_sym();
     while(strcmp(token.type, "adding") == 0){
         isNeg = 0;
@@ -905,6 +920,7 @@ void expression(){
         item();
         if(isNeg) listcode(OPR, 0, 1);
         else listcode(OPR, 0, 0);
+        token = get_sym();
     }
     untoken(token);
 }
@@ -912,6 +928,7 @@ void expression(){
 
 symbol get_sym(){
     symbol token;
+    token.depth = num_d;//所读的标识符的层次为当前层次
     char c = '\0';
     int i = 0;
     int n = 0;
@@ -1142,8 +1159,7 @@ symbol get_sym(){
     else if(syms[b].level == b){
         i = num_i-1; //这里表明过程或函数的声明没有结束
     }
-    else i = syms[b].level;///好像这种情况并不存在
-        //取当前模块的结尾当做检索起始
+    else i = syms[b].level;//取当前模块的结尾当做检索起始
     while(i>=0){
         if(syms[i].depth==j){
             if(strcmp(sym.name,syms[i].name)==0){
@@ -1182,6 +1198,13 @@ int search_rword(char* s){//保留字数组为字典序
 }///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 
 void listcode(enum code a,int b,float c){
+    if(p0==999){
+        error(num_l,1);
+        token0 = get_sym();
+        printf("%s",token0.name);
+        untoken(token0);
+        return;//
+    }
     codes[p0] = a;
     operand1[p0] = b;
     operand2[p0] = c;
