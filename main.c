@@ -74,8 +74,8 @@ typedef struct sym{
     char type[20];//类型int char string float
     char kind[20];//array func pro const var///这个 地方是为了这类特别的元素准备的，其他统称normal，这一位置只需在声明语句中初始化，
     float value;//值
+    int index;//偏移量
     int depth;
-    int level;///所属分程序的起始地址
     int addr;///这里对过程和函数是起始地址，对其内部声明的量是相对地址。
 }symbol;//这里只记录symbol的名称和类型，若为变量或常量则以浮点数形式记录其值，字符保存的是ascii码
 //对于function 和procedure,value 保存其入口地址
@@ -104,7 +104,7 @@ void expression();//表达式，这里是做一个中缀变后缀的转换，然
 void get_expre();///将表达式转为指令
 symbol get_sym();
 void listcode(enum code a,int b,float c);///a,b,c对应一条指令的三个参数
-int position(int b,symbol sym);
+int position(symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 void interret();///解释执行
 
@@ -162,6 +162,7 @@ void interpret(){
             stack[tp++] = bp;
             stack[tp++] = ip;
             bp = tp++;///注意对于函数，其bp对应保存返回值的位置
+            stack[bp]=0;
             ip = (int)a;
             continue;
         }
@@ -170,7 +171,7 @@ void interpret(){
             lbp = bp;
             stack[tp++] = bp;
             stack[tp++] = ip;
-            bp = tp;///对于过程，无需申请空间保存其返回值
+            bp = tp++;///对于过程，无需申请空间保存其返回值,但是为了统一sto指令的偏移，就假装有一个
             ip = (int)a;
             continue;
         }
@@ -215,6 +216,7 @@ void interpret(){
             ip = stack[--tp];
             bp = stack[--tp];
             lbp= stack[--tp];
+            tp = tp - l;///弹出参数所占空间
             if(a==2) stack[tp++] = eax;//若为函数需保存返回值
             eax = 0;//复位
             continue;
@@ -417,7 +419,7 @@ void const_dec(symbol sym){
     strcpy(token.type,token1.type);
     strcpy(token.kind,"const");
     token.value = token1.value;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
-    token.level = id0;///记录声明位置
+    //token.level = id0;///记录声明位置
     token.depth = num_d;
     token.addr = addr;
     vm[addr] = token.value;
@@ -436,12 +438,12 @@ int var_dec(symbol sym){
     int size = 1;
     int i = 0;
     int j = 0;
+    int index = 1;
     if(strcmp(sym.type,"ident")!=0){
         error(num_l,10);///变量名非法或为空
         return 0;
     }
     strcpy(token.name,sym.name);
-    token.level = id0;
     token.depth = num_d;
     token.addr = addr;
     strcpy(token.type,"unknown");////这里暂时不清楚变量类型，为便于处理多个变量的声明，先放一个在这
@@ -450,7 +452,6 @@ int var_dec(symbol sym){
     token1 = get_sym();//冒号或者逗号，可能是一次对多个变量进行声明
     while(token1.name[0]==44){//逗号
         token1 = get_sym();//下一个变量
-        token1.level = id0;
         token1.depth = num_d;
         token1.addr = addr;
         strcpy(token1.type,"unknown");
@@ -458,13 +459,13 @@ int var_dec(symbol sym){
         i++;
         token1 = get_sym();//逗号或冒号
     }
-    token1 = get_sym();//数据类型
     strcpy(token1.kind,"var");
+    token1 = get_sym();//数据类型
     if(strcmp(token1.name,"array")==0){
         get_sym();///[
         token1 = get_sym();
         if(strcmp(token1.type,"integer")==0){
-            size = (int)token1.value;///数组大小
+            index = (int)token1.value;///数组大小
         }
         else{
             error(num_l,11);
@@ -474,14 +475,24 @@ int var_dec(symbol sym){
         token1 = get_sym();////这里可能有很多的错误类型，都归类与error11
         strcpy(token1.kind,"array");
     }
-    listcode(ADD,0,i*size);///在数据栈中申请被声明变量所需的空间
+    listcode(ADD,0,i*index);///在数据栈中申请被声明变量所需的空间
     size = i;///记录变量个数
     while(i>=1){
         strcpy(syms[num_i-i].type,token1.name);
         strcpy(syms[num_i-i].kind,token1.kind);
-        for(j = 0;j<size;j++){
+        syms[num_i-i].value = index;
+        if(strcmp(syms[num_i-i-1].kind,"array")==0){
+            syms[num_i-i].index = syms[num_i-i-1].index + (int)syms[num_i-i-1].value;///若前一个变量是数组
+        }
+        else if(strcmp(syms[num_i-i-1].kind,"var")==0){
+            syms[num_i-i].index = syms[num_i-i-1].index + 1;//若前一个是普通变量
+        }
+        else{
+            syms[num_i-i].index = 1;//若为当前模块第一个变量
+        }
+        for(j = 0;j<index;j++){
             vm[addr++] = 0;
-        }///初始化
+        }///初始化，实际用不上
         i--;//补入数据类型
     }
     token = get_sym();//分号等
@@ -521,7 +532,6 @@ void pro_dec(symbol sym){
     strcpy(token.type,"procedure");//这里得到了过程名
     strcpy(token.kind,"procedure");///过程没有返回值，故type和kind相同
     token.value = 0;///这里应该是函数在指令序列中的起始位置
-    token.level = id0;
     token.depth = num_d;
     token.addr = addr0;///对于procedure这个地址中是没有值的
     vm[addr] = 0;
@@ -555,7 +565,6 @@ void pro_dec(symbol sym){
         }
     }//对分程序部分进行分析
     listcode(ADD,0,-syms[id0+1].value);///POP操作，将运行栈复原。
-    syms[id0].level = num_i;//保留当前模块的符号表结尾位置
     id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
     listcode(END,cur_level_args_size,1);//结束语句,结束语句对应包括记录bp、lbp、ip以及返回值在内的多种操作
@@ -572,7 +581,6 @@ void func_dec(symbol sym){
     token = sym;
     strcpy(token.kind,"function");//这里得到了函数名
     token.value = 0;///这里应该是函数在指令序列中的起始位置，由于未实现listcode就放在这
-    token.level = id0;
     token.depth = num_d;
     token.addr = addr;///这里保存的是function的返回值
     vm[addr] = 0;
@@ -608,7 +616,6 @@ void func_dec(symbol sym){
         }
     }//对分程序部分进行分析
     //listcode(ADD,0,syms[id0+1].value);//pop以保证栈平衡
-    syms[id0].level = num_i;///保存函数的符号表结尾
     id0 = num_i;
     addr0 = addr;//函数段结束，基地址复位
     listcode(END,cur_level_args_size,2);
@@ -659,7 +666,6 @@ void func_call(int n){//应包括跳转和将参数加载到运行栈两部分�
     }
     //listcode(ADD,0,i);///为参数申请空间
     listcode(CAL,0,p);///函数调用
-
     id0 = id00;
 }
 void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
@@ -755,41 +761,41 @@ void for_state(){
     symbol token1;
     int n = num_b;
     int a = 0;
-    //int b = 0;
+    int b = 0;
     int c = 0;
+    int flag = 1;
     token1 = get_sym();//步长变量
     token = get_sym();//等号
     expression();///步长初始值
     a = position(id0,token1);//这里略去了判断赋值符号的步骤
-    token = get_sym();//to  downto
-    expression();///步长的终点
-    if(strcmp(token.name,"to")==0){
-        listcode(OPR,0,1);//后比前大，减法
-    }
-    else if(strcmp(token.name,"downto")==0){
-        listcode(OPR,0,1);
-        listcode(LIT,0,-1);
-        listcode(OPR,0,2);//结果乘以-1得到步长
-    }///得到了步长
-    else{
-        error(num_l,7);
-    }
-    listcode(STO,0,a-id0-1-syms[id0+1].value);///保存步长，此后无论步长都是做自减
-    c = p0;///保留循环入口指令地址
+    token = get_sym();
+    if(strcmp(token.name,"to")==0) flag = 1;
+    else if(strcmp(token.name,"downto")==0) flag = -1;
+    else error(num_l,7);
+    //listcode(LIT,0,flag);
+    //listcode(OPR,0,1);//减去一个步长以保证循环次数，注意这里的循环次数是包括头和尾的
+    listcode(STO,0,syms[a].index);//保存步长初始值
+    b = p0;
+    listcode(JMP,0,0);//跳转目标待定
+    listcode(LOD,0,syms[a].index);//取步长
+    listcode(LIT,0,flag);
+    listcode(OPR,0,0);
+    listcode(STO,0,syms[a].index);
+    listcode(LOD,0,syms[a].index);
+    expression();
+    if(flag) listcode(OPR,0,5);///to
+    else listcode(OPR,0,9);///downto
+    listcode(JPC,0,0);//待定,条件不通过时跳转
     token = get_sym();///do
+    operand2[b] = p0;//回填
+    c = p0;
     do{
         token = get_sym();
         statement(token);
     }
     while(num_b!=n);//根据begin-end是否匹配判定do后语句是否结束，同时解决了普通语句及复合语句
-    listcode(LOD,0,a-id0-1-syms[id0+1].value);
-    listcode(LIT,0,-1);
-    listcode(OPR,0,0);//步长自减
-    listcode(STO,0,a-id0-1-syms[id0+1].value);//保存新的步长
-    listcode(LOD,0,a-id0-1-syms[id0+1].value);//取步长
-    listcode(LIT,0,0);//取零
-    listcode(OPR,0,4);//判断步长是否小于零
-    listcode(JPC,0,c);//若大于等于零则重新进入循环
+    listcode(JMP,0,b+1); //跳转至步长判断
+    operand2[c-1] = p0;//用于跳过循环
 }//for_state
 void while_state(){////以do起始
     symbol token;
@@ -1180,21 +1186,11 @@ symbol get_sym(){
     return token;
  }
 
- int position(int b,symbol sym){//在符号表中寻找当前标识符
+ int position(symbol sym){//在符号表中寻找当前标识符
     int i = 0;
     int j = sym.depth;
-    /*if(b==0){///从头查找的是函数或者过程，过程和函数不应该会重名
-        for(i = b;i<num_i;i++){
-            if(strcmp(sym.name,syms[i].name)==0){
-                return i;
-            }////一种可以考虑的办法是给出一个查找起点，用于解决不同层次间变量同名可能带来的问题
-        }
-    }*/
     i = num_i-1;
-    //printf("CHECK:%s %s\n",syms[2].name,sym.name);
     while(i>=0){
-        //printf("III: %d %d\n",i,j);
-         //if (i == 2) printf("FLAG: %s %s",syms[i].name,sym.name);
         if(syms[i].depth==j){
             if(strcmp(sym.name,syms[i].name)==0){
                 break;
@@ -1276,8 +1272,8 @@ int main(){
     strcpy(zero.name,"0");
     strcpy(zero.type,"float");
     strcpy(zero.kind,"const");
+    zero.index = 0;
     zero.value = 0;
-    zero.level = 0;
     zero.addr = -1;///初始化一个常量零用于解决表达式前可能存在的运算符的问题、
     //symbol cur_token;
     reserved[0] = "array";  reserved[1] = "begin";
