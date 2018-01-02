@@ -66,7 +66,8 @@ char* typeof_sym[] = {
     "relation", "assignment",//关系运算符，赋值符号=
     "integer",  "real",     "char",//整数、浮点数、字符
     "procedure","function",//过程、函数
-    "comma",    "semicolon","period","colon"//','';''.':'
+    "comma",    "semicolon","period","colon",//','';''.':'
+    "const","var","args"
 };///symbol的类型，主要是为了第一次作业服务
 
 typedef struct sym{
@@ -89,7 +90,7 @@ symbol suf[100];///suffix expression 保存作为转换结果的后缀表达式
 void error(int a ,int b);
 int statement();
 void const_dec(symbol sym);
-int var_dec(symbol sym);
+int var_dec(symbol sym,int type);
 void pro_dec(symbol sym);
 void func_dec(symbol sym);
 void pro_call(int n);
@@ -263,6 +264,7 @@ void error(int a,int b){
         case 16:printf("error in line %d,illegal procedure call",a);break;
         case 17:printf("error in line %d,undeclared value\n",a);break;
         case 18:printf("error in line %d,illegal reading statement\n",a);break;
+        case 19:printf("error in linde %d,illegal assignment statement\n",a);break;
         default:break;
     }
     err++;
@@ -283,7 +285,7 @@ int statement(symbol sym){
     else if(strcmp(sym.name,"var")==0){
         printf("this is a var declaration statement!\n");
         token = get_sym();
-        var_dec(token);
+        var_dec(token,1);
         return 0;
     }
     else if(strcmp(sym.name,"procedure")==0){
@@ -347,7 +349,7 @@ int statement(symbol sym){
         }
     }
     else if(strcmp(sym.type,"ident")==0){
-        i = position(0,sym);
+        i = position(sym);
         if(i!=-1){
             if(strcmp(syms[i].kind,"procedure")==0){
                 printf("this is a procedure call statement!\n");
@@ -375,10 +377,21 @@ int statement(symbol sym){
                     printf("this is a assignment statement!\n");
                     expression();
                     //printf("CUR_SYM:%s\n",sym.name);
-                    i = position(id0,sym);
+                    i = position(sym);
                     //j = syms[id0+1].value;//取参数个数
                     if(i>=0){///由于是赋值语句，不涉及对参数的赋值
-                        listcode(STO,num_d-syms[i].depth,i-id0-1);///根据偏移量保存值
+                        listcode(STO,num_d-syms[i].depth,syms[i].index);///根据偏移量保存值
+                    }
+                    else if(strcmp(sym.kind,"array")==0){
+                        expression();
+                        token = get_sym();//]
+                        listcode(LDD,num_d-symsp[i].depth,syms[i].index);
+                    }
+                    else if(strcmp(token.kind,"const")==0){
+                        error(num_l,19);
+                        while(token.name[0]!=';'){
+                            token = get_sym();
+                        }
                     }
                     else{
                         error(num_l,6);
@@ -432,7 +445,7 @@ void const_dec(symbol sym){
         const_dec(token);///若连续声明则递归调用
     }
 }///const_Dec常量的值直接写入内存，故不会有相应指令。。。。
-int var_dec(symbol sym){
+int var_dec(symbol sym,int type){////1 for var and 2 for args
     symbol token;
     symbol token1;
     int size = 1;
@@ -444,6 +457,8 @@ int var_dec(symbol sym){
         return 0;
     }
     strcpy(token.name,sym.name);
+    if(type==1) strcpy(token.kind,"var");
+    else if(type==2) strcpy(token.kind,"args");
     token.depth = num_d;
     token.addr = addr;
     strcpy(token.type,"unknown");////这里暂时不清楚变量类型，为便于处理多个变量的声明，先放一个在这
@@ -459,7 +474,6 @@ int var_dec(symbol sym){
         i++;
         token1 = get_sym();//逗号或冒号
     }
-    strcpy(token1.kind,"var");
     token1 = get_sym();//数据类型
     if(strcmp(token1.name,"array")==0){
         get_sym();///[
@@ -473,22 +487,29 @@ int var_dec(symbol sym){
         get_sym();//]
         get_sym();//of
         token1 = get_sym();////这里可能有很多的错误类型，都归类与error11
-        strcpy(token1.kind,"array");
+        strcpy(token.kind,"array");
     }
+    strcpy(token.type,token1.name);///数据类型
     listcode(ADD,0,i*index);///在数据栈中申请被声明变量所需的空间
     size = i;///记录变量个数
     while(i>=1){
-        strcpy(syms[num_i-i].type,token1.name);
-        strcpy(syms[num_i-i].kind,token1.kind);
+        strcpy(syms[num_i-i].type,token.type);
+        strcpy(syms[num_i-i].kind,token.kind);
         syms[num_i-i].value = index;
         if(strcmp(syms[num_i-i-1].kind,"array")==0){
-            syms[num_i-i].index = syms[num_i-i-1].index + (int)syms[num_i-i-1].value;///若前一个变量是数组
+            if(type==1) syms[num_i-i].index = syms[num_i-i-1].index + (int)syms[num_i-i-1].value;///若前一个变量是数组
+            else syms[num_i-i].index = 1;//若前一项为参数则为1
         }
         else if(strcmp(syms[num_i-i-1].kind,"var")==0){
-            syms[num_i-i].index = syms[num_i-i-1].index + 1;//若前一个是普通变量
+            if(type==1) syms[num_i-i].index = syms[num_i-i-1].index + 1;//若前一个是普通变量
+            else syms[num_i-i].index = 1;
+        }
+        else if(strcmp(syms[num_i-i-1].kind,"args")==0){
+            if(type==1) syms[num_i-i] = 1;
+            else syms[num_i-i].index = syms[num_i-i-1].index + 1;
         }
         else{
-            syms[num_i-i].index = 1;//若为当前模块第一个变量
+            syms[num_i-i].index = 1;//若为当前模块第一个变量或参数
         }
         for(j = 0;j<index;j++){
             vm[addr++] = 0;
@@ -506,13 +527,13 @@ int var_dec(symbol sym){
         }
         else if(strcmp(token.name,"var")==0){
             token = get_sym();
-            size = size + var_dec(token);///这里专门用作处理形式参数表
+            size = size + var_dec(token,type);///这里专门用作处理形式参数表
         }
         else if(strcmp(token.name,"begin")==0){
             return size;///变量声明结束
         }
         else{
-            size = size + var_dec(token);
+            size = size + var_dec(token,type);
         }
     }
     else if(strcmp(token.name,")")==0){
@@ -545,7 +566,7 @@ void pro_dec(symbol sym){
         token1 = get_sym();
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
-            n = var_dec(token1);///解决了整个参数表
+            n = var_dec(token1,2);///解决了整个参数表
             cur_level_args_size = n;
             token1 = get_sym();//分号
         }
@@ -594,7 +615,7 @@ void func_dec(symbol sym){
         token1 = get_sym();
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
-            n = var_dec(token1);///解决整个参数表
+            n = var_dec(token1,2);///解决整个参数表
             cur_level_args_size = n;
             token1 = get_sym();//冒号
         }
@@ -674,7 +695,7 @@ void reading(){///基于基地址进行变量的查找和赋值，变量名可�
     token = get_sym();///肯定是括号了
     while(token.name[0]!=41){////右括号
         token = get_sym();
-        i = position(id0,token);////定位
+        i = position(token);////定位
         if(i >= 0){
             if(strcmp(syms[i].kind,"array")==0){
                 error(num_l,18);
@@ -685,7 +706,7 @@ void reading(){///基于基地址进行变量的查找和赋值，变量名可�
             if(strcmp(syms[i].type,"integer")==0) listcode(LIT,0,1);
             else if(strcmp(syms[i].type,"real")==0) listcode(LIT,0,2);
             else if(strcmp(syms[i].type,"char")==0) listcode(LIT,0,3);
-            listcode(RED,syms[id0].depth-syms[i].depth,i-syms[id0].value-1);///通过相对地址找到目标位置，下同。
+            listcode(RED,num_d-syms[i].depth,syms[i].index);///通过相对地址找到目标位置，下同。
             i = 0;///复位
         }else{
             error(num_l, 17);
@@ -767,7 +788,7 @@ void for_state(){
     token1 = get_sym();//步长变量
     token = get_sym();//等号
     expression();///步长初始值
-    a = position(id0,token1);//这里略去了判断赋值符号的步骤
+    a = position(token1);//这里略去了判断赋值符号的步骤
     token = get_sym();
     if(strcmp(token.name,"to")==0) flag = 1;
     else if(strcmp(token.name,"downto")==0) flag = -1;
@@ -864,7 +885,7 @@ void factor(){
         untoken(token);
     }
     else if(strcmp(token.type, "ident") == 0){
-        i = position(0,token);
+        i = position(token);
         if(i<0){
             error(num_l,17);
         }
@@ -872,12 +893,12 @@ void factor(){
             func_call(i);
         }
         else if(strcmp(syms[i].kind,"const")==0){
-            i = position(id0,token);
+            i = position(token);
             i = syms[i].value;
             listcode(LIT,0,i);
         }
         else {
-            i = position(id0, token);
+            i = position(token);
             j = syms[id0+1].value;//参数个数
             if(i < 0){
                 error(num_l, 17);
@@ -887,21 +908,19 @@ void factor(){
                 expression();
                 token = get_sym();//]
                 if(i-id0-1>j){//不是参数,即为变量
-                    j = i - id0 - 1 - j;
+                    listcode(LDD,num_d-syms[i].depth,syms[i].index);
                 }
                 else{//是参数
-                    j = -j-4+i-id0-1;//-参数数-4-偏移
+                    listcode(LDD,0,-syms[id0+1].value-4+syms[i].index);
                 }
-                listcode(LDD,syms[id0].depth-syms[i].depth+1,j);
             }
             else{
                 if(i-id0-1>j){//不是参数,即为变量
-                    j = i - id0 - 1 - j;
+                    listcode(LOD,num_d-syms[i].depth,syms[i].index);
                 }
                 else{//是参数
-                    j = -j-4+i-id0-1;//-参数数-4-偏移
+                    listcode(LOD,0,-syms[id0+1].value-4+syms[i].index);
                 }
-                listcode(LOD,syms[id0].depth-syms[i].depth+1,j);///这里注意过程或函数的层次（id0的层次）与其中的变量的层次差1
             }
         }
     }
