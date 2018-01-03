@@ -19,6 +19,7 @@
 #define norw 21//number of reserved words
 FILE* fin;
 FILE* fout;
+FILE* fout1;
 
 enum code{LIT,OPR,LOD,STO,CAL,CLL,ADD,JMP,JPC,RED,WRT,END,LDD,SDD};
 /*lit 取常量到栈顶
@@ -102,25 +103,26 @@ void for_state();
 void while_state();
 void condition();
 void expression();//表达式，这里是做一个中缀变后缀的转换，然后计算后缀表达式。用于保存后缀表达式的栈不必是全局变量。
-void get_expre();///将表达式转为指令
 symbol get_sym();
 void listcode(enum code a,int b,float c);///a,b,c对应一条指令的三个参数
 int position(symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
-void interret();///解释执行
+void interpret();///解释执行
 
 void interpret(){
  //p1;//初始情况下这个是程序入口
  //p0;//初始情况下这个是程序结尾
-    int ip = 0;
+    int ip = p1;
     int bp = 0;///当前分程序数据区的起始地址
     int lbp = 0;///上一分程序的数据区基地址
     float stack[100]={0};///运行栈
     int tp = 0;//栈顶
     int l = 0;
-    int a = 0;
+    float a = 0;
     float eax = 0;//用于保存返回值
-    while(ip>0&&ip<=p0){
+    while(ip>=0&&ip<=p0){
+        //printf("%d ",ip);
+        printf("%d ",ip);
         l = operand1[ip];
         a = operand2[ip];
         if(codes[ip]==LIT){
@@ -146,14 +148,14 @@ void interpret(){
             continue;
         }///需要注意的是并没有正确的对const量进行处理，
         else if(codes[ip]==LOD){
-            if(l) stack[tp++] = stack[lbp+a];//层次差为1
-            else stack[tp++] = stack[bp+a];//层次差为零
+            if(l) stack[tp++] = stack[lbp+(int)a];//层次差为1
+            else stack[tp++] = stack[bp+(int)a];//层次差为零
             ip++;
             continue;
         }
         else if(codes[ip]==STO){
-            if(l) stack[lbp+a] = stack[--tp];
-            else stack[bp+a] = stack[--tp];
+            if(l) stack[lbp+(int)a] = stack[--tp];
+            else stack[bp+(int)a] = stack[--tp];
             ip++;
             continue;
         }
@@ -186,28 +188,30 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==JPC){
-            if(stack[tp-1]==0) ip = (int)a;
+            if(stack[tp-1]+operand1[ip]==1) ip = (int)a;///这里对于条件语句和循环语句是不同的
             else ip++;///条件未通过时跳转
             continue;
         }
         else if(codes[ip]==RED){/////由于未区分数据类型，可能导致一些问题
             if(l){
-                if(stack[tp-1]==1) scanf("%d",&stack[lbp+a]);
-                else if(stack[tp-1]==2) scanf("%f",&stack[lbp+a]);
-                else if(stack[tp-1]==3) scanf("%c",&stack[lbp+a]);
+                if(stack[tp-1]==1) scanf("%f",&stack[lbp+(int)a]);
+                else if(stack[tp-1]==2) scanf("%f",&stack[lbp+(int)a]);
+                else if(stack[tp-1]==3) scanf("%f",&stack[lbp+(int)a]);
             }
             else{
-                if(stack[tp-1]==1) scanf("%d",&stack[bp+a]);
-                else if(stack[tp-1]==2) scanf("%f",&stack[bp+a]);
-                else if(stack[tp-1]==3) scanf("%c",&stack[bp+a]);
+                if(stack[tp-1]==1) scanf("%f",&stack[bp+(int)a]);
+                else if(stack[tp-1]==2) scanf("%f",&stack[bp+(int)a]);
+                else if(stack[tp-1]==3) scanf("%f",&stack[bp+(int)a]);
             }
             ip++;
             tp--;///栈顶表示数据类型
+            //printf("CHECK:%d %f %f" ,ip,a,stack[bp+(int)a]);
             continue;
         }
         else if(codes[ip]==WRT){///栈顶内容数据类型未知
-            if(a==-1) fprintf(fout,"%f",stack[--tp]);
-            else fprintf(fout,"%s",syms[--num_i].name);
+            if((int)a==-1) fprintf(fout,"%f",stack[--tp]);
+            else fprintf(fout,"%s",syms[(int)a].name);
+            //printf("%s",syms[0].name);
             ip++;
             continue;
         }
@@ -218,22 +222,23 @@ void interpret(){
             bp = stack[--tp];
             lbp= stack[--tp];
             tp = tp - l;///弹出参数所占空间
-            if(a==2) stack[tp++] = eax;//若为函数需保存返回值
+            if((int)a==2) stack[tp++] = eax;//若为函数需保存返回值
             eax = 0;//复位
             continue;
         }
         else if(codes[ip]==LDD){
             a = a+(int)stack[tp-1];
-            if(l) stack[tp-1] = stack[lbp+a];
-            else stack[tp-1] = stack[bp+a];
+            if(l) stack[tp-1] = stack[lbp+(int)a];
+            else stack[tp-1] = stack[bp+(int)a];
             ip++;
             continue;
         }
         else if(codes[ip]==SDD){
-            a = a+(int)stack[--tp];//栈顶为偏移量
-            if(l) stack[lbp+a] = stack[--tp];
-            else stack[bp+a] = stack[--tp];
+            a = a+(int)stack[tp-2];//栈顶为偏移量
+            if(l) stack[lbp+(int)a] = stack[--tp];
+            else stack[bp+(int)a] = stack[--tp];
             ip++;
+            tp--;
             continue;
         }
         else{
@@ -277,67 +282,70 @@ int statement(symbol sym){
     int k = 0;
     symbol token;
     if(strcmp(sym.name,"const")==0){
-        printf("this is a const declaration statement!\n");
+        fprintf(fout1,"this is a const declaration statement!\n");
         token = get_sym();
         const_dec(token);
         return 0;
     }
     else if(strcmp(sym.name,"var")==0){
-        printf("this is a var declaration statement!\n");
+        fprintf(fout1,"this is a var declaration statement!\n");
         token = get_sym();
         var_dec(token,1);
         return 0;
     }
     else if(strcmp(sym.name,"procedure")==0){
         token = get_sym();
-        printf("this is a procedure declaration statement!\n");
+        fprintf(fout1,"this is a procedure declaration statement!\n");
         pro_dec(token);
         return 0;
     }
     else if(strcmp(sym.name,"function")==0){
         token = get_sym();
-        printf("this is a function declaration statement!\n");
+        fprintf(fout1,"this is a function declaration statement!\n");
         func_dec(token);
         return 0;
     }/////根据get_sym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
     else if(strcmp(sym.name,"read")==0){
+        fprintf(fout1,"this is a read statement!\n");
         reading();
-        printf("this is a read statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"write")==0){
+        fprintf(fout1,"this is a write statement!\n");
         writing();
-        printf("this is a write statement!\n");
         return 0;
     }
     else if(strcmp(sym.name,"if")==0){
-        printf("this is a if statement!\n");///应该顺便解决else和then分支
+        fprintf(fout1,"this is a if statement!\n");///应该顺便解决else和then分支
         if_state();
         return 0;
     }
     else if(strcmp(sym.name,"do")==0){
-        printf("this is a while statement!\n");
+        fprintf(fout1,"this is a while statement!\n");
         while_state();
         return 0;
     }
     else if(strcmp(sym.name,"for")==0){
-        printf("this is a for statement!\n");
+        fprintf(fout1,"this is a for statement!\n");
         for_state();
         return 0;
     }
     else if(strcmp(sym.name,"begin")==0){
         num_b++;
+        //printf("CHECK NUM_B=%d\n",num_b);
         return 4;//约等于跳过了begin
     }
     else if(strcmp(sym.name,"end")==0){
         token = get_sym();
         if(token.name[0]==46){///.
             num_b--;
+            //printf("CHECK NUM_B=%d\n",num_b);
             p0--;//最后一条指令的标记是p0
             return 1;///end of file
         }
         else if(token.name[0] == 59){//end of a procedure or a function
             num_b--;
+            //printf("CHECK NUM_B=%d\n",num_b);
             return 2;
         }
         else{
@@ -345,6 +353,7 @@ int statement(symbol sym){
                 ungetc(token.name[i-1],fin);
             }
             num_b--;
+            //printf("CHECK NUM_B=%d\n",num_b);
             return 3;///普通复合语句的结尾
         }
     }
@@ -352,7 +361,7 @@ int statement(symbol sym){
         i = position(sym);
         if(i!=-1){
             if(strcmp(syms[i].kind,"procedure")==0){
-                printf("this is a procedure call statement!\n");
+                fprintf(fout1,"this is a procedure call statement!\n");
                 id00 = id0;///调用前保存上一级在符号表中的位置
                 pro_call(i);
                 id00 = 0;///复位
@@ -373,19 +382,14 @@ int statement(symbol sym){
             }//若为函数或过程则为调用语句，否则是赋值语句
             else{
                 token = get_sym();
+                i = position(sym);
                 if(strcmp(token.type,"assignment")==0){///赋值语句肯定是分号结尾没跑了
-                    printf("this is a assignment statement!\n");
+                    fprintf(fout1,"this is a assignment statement!\n");
                     expression();
                     //printf("CUR_SYM:%s\n",sym.name);
-                    i = position(sym);
                     //j = syms[id0+1].value;//取参数个数
                     if(i>=0){///由于是赋值语句，不涉及对参数的赋值
                         listcode(STO,num_d-syms[i].depth,syms[i].index);///根据偏移量保存值
-                    }
-                    else if(strcmp(sym.kind,"array")==0){
-                        expression();
-                        token = get_sym();//]
-                        listcode(LDD,num_d-symsp[i].depth,syms[i].index);
                     }
                     else if(strcmp(token.kind,"const")==0){
                         error(num_l,19);
@@ -397,14 +401,22 @@ int statement(symbol sym){
                         error(num_l,6);
                         //printf("i=%d\n",(int)i);
                         //printf("%s %s\n",syms[2].name,syms[id0-1].name);
-
-                        /*while(token.name[0]!=';'){
+                        while(token.name[0]!=';'){
                             token = get_sym();
-                        }*/
+                        }
                     }
                     token = get_sym();//分号
                     return 0;
                 }////这里还需要判断是否为函数或过程的调用语句
+                else if(token.name[0]=='['){//数组
+                    fprintf(fout1,"this is a assignment statement!\n");
+                    expression();
+                    token = get_sym();//]
+                    token = get_sym();//:=
+                    expression();
+                    listcode(SDD,num_d-syms[i].depth,syms[i].index);
+                    token = get_sym();//;
+                }
             }
         }
         else{//feifa
@@ -505,7 +517,7 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
             else syms[num_i-i].index = 1;
         }
         else if(strcmp(syms[num_i-i-1].kind,"args")==0){
-            if(type==1) syms[num_i-i] = 1;
+            if(type==1) syms[num_i-i].index = 1;
             else syms[num_i-i].index = syms[num_i-i-1].index + 1;
         }
         else{
@@ -530,6 +542,8 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
             size = size + var_dec(token,type);///这里专门用作处理形式参数表
         }
         else if(strcmp(token.name,"begin")==0){
+            num_b++;
+            //printf("CHECK NUM_B=%d\n",num_b);
             return size;///变量声明结束
         }
         else{
@@ -585,7 +599,7 @@ void pro_dec(symbol sym){
             break;
         }
     }//对分程序部分进行分析
-    listcode(ADD,0,-syms[id0+1].value);///POP操作，将运行栈复原。
+    //listcode(ADD,0,-syms[id0+1].value);///POP操作，将运行栈复原。
     id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
     listcode(END,cur_level_args_size,1);//结束语句,结束语句对应包括记录bp、lbp、ip以及返回值在内的多种操作
@@ -729,10 +743,13 @@ void writing(){
         token = get_sym();//字符串
         //printf("%s\n",token.name);
         syms[num_i++] = token;
+        printf("DEBUG!:%s ",token.name);
         listcode(WRT,0,num_i-1);///字符串录入符号表后根据其地址进行输出。
         token = get_sym();
-        if(strcmp(token.type,"colon")==0){
+        printf("DEBUG:%s ",token.name);
+        if(token.name[0]==','){
             expression();/////表达式处理不应该超出表达式
+            listcode(WRT,0,-1);
             token = get_sym();///括号
         }
     }
@@ -751,7 +768,7 @@ void if_state(){
     int source = 0;///记录跳转语句位置
     condition();
     source = p0;
-    listcode(JPC,0,0);///条件跳转,跳转目标待定
+    listcode(JPC,1,0);///条件跳转,跳转目标待定
     token = get_sym();///then
     do{
         token = get_sym();
@@ -804,11 +821,12 @@ void for_state(){
     listcode(STO,0,syms[a].index);
     listcode(LOD,0,syms[a].index);
     expression();
-    if(flag) listcode(OPR,0,5);///to
-    else listcode(OPR,0,9);///downto
-    listcode(JPC,0,0);//待定,条件不通过时跳转
+    if(flag) listcode(OPR,0,8);///to
+    else listcode(OPR,0,4);///downto
+    listcode(JPC,0,0);//待定,条件通过时跳转
     token = get_sym();///do
     operand2[b] = p0;//回填
+    fprintf(fout1,"%d\n",p0);
     c = p0;
     do{
         token = get_sym();
@@ -817,6 +835,7 @@ void for_state(){
     while(num_b!=n);//根据begin-end是否匹配判定do后语句是否结束，同时解决了普通语句及复合语句
     listcode(JMP,0,b+1); //跳转至步长判断
     operand2[c-1] = p0;//用于跳过循环
+    fprintf(fout1,"%d,\n",p0);
 }//for_state
 void while_state(){////以do起始
     symbol token;
@@ -907,15 +926,10 @@ void factor(){
                 token = get_sym();//[
                 expression();
                 token = get_sym();//]
-                if(i-id0-1>j){//不是参数,即为变量
-                    listcode(LDD,num_d-syms[i].depth,syms[i].index);
-                }
-                else{//是参数
-                    listcode(LDD,0,-syms[id0+1].value-4+syms[i].index);
-                }
+                listcode(LDD,num_d-syms[i].depth,syms[i].index);
             }
             else{
-                if(i-id0-1>j){//不是参数,即为变量
+                if(strcmp(syms[i].kind,"var")==0){//不是参数,即为变量
                     listcode(LOD,num_d-syms[i].depth,syms[i].index);
                 }
                 else{//是参数
@@ -935,7 +949,7 @@ void factor(){
         untoken(token);///表达式后接保留字，如for语句
     }
     else{
-        printf("%s\n",token.name);
+        //printf("%s\n",token.name);
         error(num_l,6);
     }
 }
@@ -1080,8 +1094,11 @@ symbol get_sym(){
         char s[100];
         while((c = fgetc(fin))!='"'){
             s[i++] = c;
+            //printf("%d %d\n",i,c);
+
         }
         s[i] = '\0';//字符串，没有考虑引号不配对等问题。字符串中没有保留引号
+        //printf("DEBUG:%s %d\n",s,i);
         strcpy(token.name,s);
         strcpy(token.type,"string");
         token.value = 0;
@@ -1262,29 +1279,27 @@ void listcode(enum code a,int b,float c){
     operand2[p0] = c;
     p0++;
     switch(a){
-        case LIT:printf("LIT");break;
-        case OPR:printf("OPR");break;
-        case LOD:printf("LOD");break;
-        case STO:printf("STO");break;
-        case CAL:printf("CAL");break;
-        case CLL:printf("CLL");break;
-        case ADD:printf("ADD");break;
-        case JMP:printf("JMP");break;
-        case JPC:printf("JPC");break;
-        case RED:printf("RED");break;
-        case WRT:printf("WRT");break;
-        case END:printf("END");break;
-        case LDD:printf("LDD");break;
-        case SDD:printf("SDD");break;
+        case LIT:fprintf(fout1,"LIT");break;
+        case OPR:fprintf(fout1,"OPR");break;
+        case LOD:fprintf(fout1,"LOD");break;
+        case STO:fprintf(fout1,"STO");break;
+        case CAL:fprintf(fout1,"CAL");break;
+        case CLL:fprintf(fout1,"CLL");break;
+        case ADD:fprintf(fout1,"ADD");break;
+        case JMP:fprintf(fout1,"JMP");break;
+        case JPC:fprintf(fout1,"JPC");break;
+        case RED:fprintf(fout1,"RED");break;
+        case WRT:fprintf(fout1,"WRT");break;
+        case END:fprintf(fout1,"END");break;
+        case LDD:fprintf(fout1,"LDD");break;
+        case SDD:fprintf(fout1,"SDD");break;
         default:break;
     }
-    printf(" %d %f\n",b,c);///用于测试
+    fprintf(fout1," %d %f %d\n",b,c,p0-1);///用于测试*/
 }
-
 
 int main(){
     char fname[100];//文件路径
-    FILE *fout;
     int n = 0;
     int i = 0;
 
@@ -1308,12 +1323,21 @@ int main(){
     reserved[20]= "write";
 
     printf("Please enter the name of file to compile.\n");//使用绝对路径
-    scanf("%s",fname);
-    if((fin = fopen(fname,"r"))==NULL){
+    //scanf("%s",fname);
+    //if((fin = fopen(fname,"r"))==NULL){
+    if((fin= fopen("1.txt","r"))==NULL){
         printf("Open failed");
         return 1;
     }
-    fout = fopen("the_result.txt","w");
+    if((fout = fopen("the_result.txt","w+"))==NULL){
+        printf("OPEN FAILED");
+        return 2;
+    }
+    fout1 = fopen("the_code.txt","w+");
+    //fprintf(fout,"Hello world\n");
+     //test_fout();
+    //fclose(fout);
+    //return 0;
     while(1){
         token0 = get_sym();
         n = statement(token0);
@@ -1322,13 +1346,22 @@ int main(){
         }
         i++;
         //fprintf(fout,"%d %s %s\n",num_t,token0.type,token0.name);
-        //printf("%d\n",i);
+        //"%d\n",i);
     }
-
     printf("end of file");
-    interpret();
+    fclose(fout1);
+    if(num_b!=0){
+        printf("%d unpaired begin-end\n",num_b);
+    }
+    else if(err!=0){
+        printf("cannot interpret\n");
+    }
+    else{
+        interpret();
+        printf("DONE\n");
+    }
     fclose(fin);
-    fclose(fout);
+
 
     return 0;
 }

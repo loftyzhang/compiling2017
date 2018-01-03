@@ -51,5 +51,3 @@ begin
 	write("/n");
 	write("their average is:",average);
 end.
-
-
