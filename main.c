@@ -54,6 +54,7 @@ int id00 = 0;//上一级模块在符号表的起始地址
 int p0 = 0;///解释执行的pcode下标
 int p1 = 0;///解释执行的下一条pcode
 int p2 = 0;
+
 //int suf_i = 0;//用于表达式处理,结果栈的编号
 float vm[1000] = {0};//模拟的地址空间-addr
 
@@ -114,11 +115,11 @@ void untoken(symbol token);
 void interpret(){
  //p1;//初始情况下这个是程序入口
  //p0;//初始情况下这个是程序结尾
+    int tp = 1;//栈顶
+    float stack[100]={0};///运行栈
     int ip = 0;
     int bp = 0;///当前分程序数据区的起始地址
     int lbp = 0;///上一分程序的数据区基地址
-    float stack[100]={0};///运行栈
-    int tp = 1;//栈顶
     int l = 0;
     float a = 0;
     float eax = 0;//用于保存返回值
@@ -126,7 +127,7 @@ void interpret(){
         l = operand1[ip];
         a = operand2[ip];
         printf("%d ",ip);
-        printf("CHECK:%d %f\n",tp,a);
+        printf("CHECK:%d %f\n",tp,stack[tp-1]);
          if(codes[ip]==ADD){
             tp = tp + (int)a;
             ip++;
@@ -139,10 +140,10 @@ void interpret(){
     ip = p1;
     while(ip>=0&&ip<=p0){
         //printf("%d ",ip);
-        printf("%d ",ip);
-        printf("CHECK:%d %f\n",tp,stack[tp-1]);
         l = operand1[ip];
         a = operand2[ip];
+        //printf("%d ",ip);
+        //printf("CHECK:%d %f %f\n",lbp,stack[6],a);
         if(codes[ip]==LIT){
             stack[tp++] = a;//将常数移动到栈顶
             ip++;
@@ -154,12 +155,12 @@ void interpret(){
                 case 1:tp--;stack[tp-1]=stack[tp-1]-stack[tp];break;
                 case 2:tp--;stack[tp-1]=stack[tp-1]*stack[tp];break;
                 case 3:tp--;stack[tp-1]=stack[tp-1]/stack[tp];break;
-                case 4:tp--;if(stack[tp-1]<stack[tp]) stack[tp-1]=1;break;
-                case 5:tp--;if(stack[tp-1]<=stack[tp]) stack[tp-1]=1;break;
-                case 6:tp--;if(stack[tp-1]==stack[tp]) stack[tp-1]=1;break;
-                case 7:tp--;if(stack[tp-1]!=stack[tp]) stack[tp-1]=1;break;
-                case 8:tp--;if(stack[tp-1]>stack[tp]) stack[tp-1]=1;break;
-                case 9:tp--;if(stack[tp-1]>=stack[tp]) stack[tp-1]=1;break;
+                case 4:tp--;if(stack[tp-1]<stack[tp]) stack[tp-1]=1;else stack[tp-1]=0;break;
+                case 5:tp--;if(stack[tp-1]<=stack[tp]) stack[tp-1]=1;else stack[tp-1]=0;break;
+                case 6:tp--;if(stack[tp-1]==stack[tp]) stack[tp-1]=1;else stack[tp-1]=0;break;
+                case 7:tp--;if(stack[tp-1]!=stack[tp]) stack[tp-1]=1;else stack[tp-1]=0;break;
+                case 8:tp--;if(stack[tp-1]>stack[tp]) stack[tp-1]=1;else stack[tp-1]=0;break;
+                case 9:tp--;if(stack[tp-1]>=stack[tp]) stack[tp-1]=1;else stack[tp-1]=0;break;
                 default:break;
             }
             ip++;
@@ -178,6 +179,7 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==CAL){
+            stack[tp++] = (float)l;
             stack[tp++] = lbp;
             lbp = bp;
             stack[tp++] = bp;
@@ -188,12 +190,24 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==CLL){
+            stack[tp++] = (float)l;
             stack[tp++] = lbp;
             lbp = bp;
             stack[tp++] = bp;
             stack[tp++] = ip+1;
             bp = tp++;///对于过程，无需申请空间保存其返回值,但是为了统一sto指令的偏移，就假装有一个
             ip = (int)a;
+            continue;
+        }
+        else if(codes[ip]==END){
+            eax = stack[bp];
+            tp = bp;
+            ip = stack[--tp];
+            bp = stack[--tp];
+            lbp= stack[--tp];
+            tp = tp - stack[--tp];///弹出参数所占空间
+            if((int)a==2) stack[tp++] = eax;//若为函数需保存返回值
+            eax = 0;//复位
             continue;
         }
         else if(codes[ip]==ADD){
@@ -236,17 +250,6 @@ void interpret(){
 
             continue;
         }
-        else if(codes[ip]==END){
-            eax = stack[bp];
-            tp = bp;
-            ip = stack[--tp];
-            bp = stack[--tp];
-            lbp= stack[--tp];
-            tp = tp - l;///弹出参数所占空间
-            if((int)a==2) stack[tp++] = eax;//若为函数需保存返回值
-            eax = 0;//复位
-            continue;
-        }
         else if(codes[ip]==LDD){
             a = a+(int)stack[tp-1];
             if(l) stack[tp-1] = stack[lbp+(int)a];
@@ -255,7 +258,7 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==SDD){
-            a = a+(int)stack[tp-2];//栈顶为偏移量
+            a = a+(int)stack[tp-2];//次栈顶为偏移量
             if(l) stack[lbp+(int)a] = stack[--tp];
             else stack[bp+(int)a] = stack[--tp];
             ip++;
@@ -267,6 +270,7 @@ void interpret(){
             return;
         }
     }
+    //printf("DEBUG0:%d %d %d %d %d\n",stack[1],stack[2],stack[3],stack[4],stack[5]);
 }
 
 
@@ -290,7 +294,8 @@ void error(int a,int b){
         case 16:printf("error in line %d,illegal procedure call",a);break;
         case 17:printf("error in line %d,undeclared value\n",a);break;
         case 18:printf("error in line %d,illegal reading statement\n",a);break;
-        case 19:printf("error in linde %d,illegal assignment statement\n",a);break;
+        case 19:printf("error in line %d,illegal assignment statement\n",a);break;
+        case 20:printf("error in line %d,out of range of the array\n",a);break;
         default:break;
     }
     err++;
@@ -422,6 +427,7 @@ int statement(symbol sym){
                     }
                     else{
                         error(num_l,6);
+                        printf("CHECK1:%d\n",i);
                         //printf("i=%d\n",(int)i);
                         //printf("%s %s\n",syms[2].name,syms[id0-1].name);
                         while(token.name[0]!=';'){
@@ -437,15 +443,18 @@ int statement(symbol sym){
                     token = get_sym();//]
                     token = get_sym();//:=
                     expression();
+                    //if(stack[tp-2]>syms[i].value) error(num_l,20);
                     listcode(SDD,num_d-syms[i].depth,syms[i].index);
                     token = get_sym();//;
                 }
                 else{
+                    printf("CHECK4:%s\n",sym.name);
                     error(num_l,6);
                 }
             }
         }
         else{//feifa
+            printf("CHECK3:%s\n",sym.name);
             error(num_l,6);
             /*while(token.name[0]!=';'){
                 token = get_sym();
@@ -621,6 +630,11 @@ void pro_dec(symbol sym){
             cur_level_args_size = n;
             token1 = get_sym();//分号
         }
+        else if(strcmp(token1.type,"ident")==0){
+            n = var_dec(token1,2);
+            cur_level_args_size = n;
+            token1 = get_sym();//分号
+        }
         else{
             error(num_l,14);
         }
@@ -671,9 +685,15 @@ void func_dec(symbol sym){
     token1 = get_sym();//开始参数表部分(40 41 91 93
     if(token1.name[0]==40){///左括号，40
         token1 = get_sym();
+        //printf("%s %s %s",token1.name,token1.type,token1.type);
         if(strcmp(token1.name,"var")==0){
             token1 = get_sym();
             n = var_dec(token1,2);///解决整个参数表
+            cur_level_args_size = n;
+            token1 = get_sym();//冒号
+        }
+        else if(strcmp(token1.type,"ident")==0){
+            n = var_dec(token1,2);
             cur_level_args_size = n;
             token1 = get_sym();//冒号
         }
@@ -727,7 +747,7 @@ void pro_call(int n){
         error(num_l, 16);
     }
     token = get_sym();///分号
-    listcode(CLL,0,p);//过程调用语句这里好像调用和跳转没啥区别。
+    listcode(CLL,i,p);//过程调用语句这里好像调用和跳转没啥区别。
 
     id0 = id00;///复位
 }////在这一部分首先需要把实际参数加载入数据栈，然后再跳转，这里lod之前应该进行地址的声明
@@ -749,7 +769,7 @@ void func_call(int n){//应包括跳转和将参数加载到运行栈两部分�
     if(i != (int)(syms[n + 1].value)){
         error(num_l, 9);
     }
-    listcode(CAL,0,p);///函数调用
+    listcode(CAL,i,p);///函数调用
     id0 = id00;
 }
 void reading(){///基于基地址进行变量的查找和赋值，变量名可能是数组元素
@@ -872,6 +892,10 @@ void for_state(){
     else listcode(OPR,0,4);///downto
     listcode(JPC,0,0);//待定,条件通过时跳转
     token = get_sym();///do
+    if(strcmp(token.name,"do")!=0){
+        untoken(token);///假装有do
+        error(num_l,7);
+    }
     operand2[b] = p0;//回填
     fprintf(fout1,"%d\n",p0);
     c = p0;
@@ -973,6 +997,7 @@ void factor(){
                 token = get_sym();//[
                 expression();
                 token = get_sym();//]
+                //if(stack[tp-1]>syms[i].value) error(num_l,20);
                 listcode(LDD,num_d-syms[i].depth,syms[i].index);
             }
             else{
@@ -980,7 +1005,7 @@ void factor(){
                     listcode(LOD,num_d-syms[i].depth,syms[i].index);
                 }
                 else{//是参数
-                    listcode(LOD,0,-syms[id0+1].value-4+syms[i].index);
+                    listcode(LOD,0,-syms[id0+1].value-5+syms[i].index);
                 }
             }
         }
@@ -997,6 +1022,7 @@ void factor(){
     }
     else{
         //printf("%s\n",token.name);
+        printf("CHECK2:%s\n",token.name);
         error(num_l,6);
     }
 }
@@ -1371,9 +1397,9 @@ int main(){
     reserved[20]= "write";
 
     printf("Please enter the name of file to compile.\n");//使用绝对路径
-    //scanf("%s",fname);
-    //if((fin = fopen(fname,"r"))==NULL){
-    if((fin= fopen("1.txt","r"))==NULL){
+    scanf("%s",fname);
+    if((fin = fopen(fname,"r"))==NULL){
+    //if((fin= fopen("1.txt","r"))==NULL){
         printf("Open failed");
         return 1;
     }
