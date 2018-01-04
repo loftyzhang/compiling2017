@@ -53,6 +53,7 @@ int id0  = 0;//某模块在符号表的起始地址
 int id00 = 0;//上一级模块在符号表的起始地址
 int p0 = 0;///解释执行的pcode下标
 int p1 = 0;///解释执行的下一条pcode
+int p2 = 0;
 //int suf_i = 0;//用于表达式处理,结果栈的编号
 float vm[1000] = {0};//模拟的地址空间-addr
 
@@ -108,21 +109,38 @@ void listcode(enum code a,int b,float c);///a,b,c对应一条指令的三个参�
 int position(symbol sym);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 void interpret();///解释执行
+void untoken(symbol token);
 
 void interpret(){
  //p1;//初始情况下这个是程序入口
  //p0;//初始情况下这个是程序结尾
-    int ip = p1;
+    int ip = 0;
     int bp = 0;///当前分程序数据区的起始地址
     int lbp = 0;///上一分程序的数据区基地址
     float stack[100]={0};///运行栈
-    int tp = 0;//栈顶
+    int tp = 1;//栈顶
     int l = 0;
     float a = 0;
     float eax = 0;//用于保存返回值
+    while(ip>=0&&ip<p2){
+        l = operand1[ip];
+        a = operand2[ip];
+        printf("%d ",ip);
+        printf("CHECK:%d %f\n",tp,a);
+         if(codes[ip]==ADD){
+            tp = tp + (int)a;
+            ip++;
+            continue;
+        }
+        else{
+            printf("WTF\n");
+        }
+    }
+    ip = p1;
     while(ip>=0&&ip<=p0){
         //printf("%d ",ip);
         printf("%d ",ip);
+        printf("CHECK:%d %f\n",tp,stack[tp-1]);
         l = operand1[ip];
         a = operand2[ip];
         if(codes[ip]==LIT){
@@ -146,7 +164,7 @@ void interpret(){
             }
             ip++;
             continue;
-        }///需要注意的是并没有正确的对const量进行处理，
+        }///需要注意的是有没有正确的对const量进行处理，
         else if(codes[ip]==LOD){
             if(l) stack[tp++] = stack[lbp+(int)a];//层次差为1
             else stack[tp++] = stack[bp+(int)a];//层次差为零
@@ -163,7 +181,7 @@ void interpret(){
             stack[tp++] = lbp;
             lbp = bp;
             stack[tp++] = bp;
-            stack[tp++] = ip;
+            stack[tp++] = ip+1;
             bp = tp++;///注意对于函数，其bp对应保存返回值的位置
             stack[bp]=0;
             ip = (int)a;
@@ -173,7 +191,7 @@ void interpret(){
             stack[tp++] = lbp;
             lbp = bp;
             stack[tp++] = bp;
-            stack[tp++] = ip;
+            stack[tp++] = ip+1;
             bp = tp++;///对于过程，无需申请空间保存其返回值,但是为了统一sto指令的偏移，就假装有一个
             ip = (int)a;
             continue;
@@ -209,10 +227,13 @@ void interpret(){
             continue;
         }
         else if(codes[ip]==WRT){///栈顶内容数据类型未知
-            if((int)a==-1) fprintf(fout,"%f",stack[--tp]);
+            if((int)a==-1){
+                fprintf(fout,"%f",stack[--tp]);
+            }
             else fprintf(fout,"%s",syms[(int)a].name);
             //printf("%s",syms[0].name);
             ip++;
+
             continue;
         }
         else if(codes[ip]==END){
@@ -296,12 +317,14 @@ int statement(symbol sym){
     else if(strcmp(sym.name,"procedure")==0){
         token = get_sym();
         fprintf(fout1,"this is a procedure declaration statement!\n");
+        if(p2==0&&num_i!=0) p2 = p0;///保存第零层声明的量
         pro_dec(token);
         return 0;
     }
     else if(strcmp(sym.name,"function")==0){
         token = get_sym();
         fprintf(fout1,"this is a function declaration statement!\n");
+        if(p2==0&&num_i!=0) p2 = p0;///保存第零层声明的量
         func_dec(token);
         return 0;
     }/////根据get_sym函数的特性，先考虑保留字的问题，再故这四个分支是先判断声明再判断调用
@@ -417,6 +440,9 @@ int statement(symbol sym){
                     listcode(SDD,num_d-syms[i].depth,syms[i].index);
                     token = get_sym();//;
                 }
+                else{
+                    error(num_l,6);
+                }
             }
         }
         else{//feifa
@@ -508,6 +534,7 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
         strcpy(syms[num_i-i].type,token.type);
         strcpy(syms[num_i-i].kind,token.kind);
         syms[num_i-i].value = index;
+        syms[num_i-i].depth = num_d;
         if(strcmp(syms[num_i-i-1].kind,"array")==0){
             if(type==1) syms[num_i-i].index = syms[num_i-i-1].index + (int)syms[num_i-i-1].value;///若前一个变量是数组
             else syms[num_i-i].index = 1;//若前一项为参数则为1
@@ -546,7 +573,17 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
             //printf("CHECK NUM_B=%d\n",num_b);
             return size;///变量声明结束
         }
-        else{
+        else if(strcmp(token.type,"ident")==0){
+            j = position(token);
+            if((j>=0)&&(syms[j].depth==num_d)){
+                untoken(token);
+                return size;
+            }//若后为当前层次声明过的变量
+            else{//若为未声明的变量
+                size = size + var_dec(token,type);
+            }
+        }
+        else{///大概是多余的一句话
             size = size + var_dec(token,type);
         }
     }
@@ -598,8 +635,15 @@ void pro_dec(symbol sym){
         if(n==2){//end;时完成分程序分析，退出
             break;
         }
+        if(n==1){
+            ungetc('.',fin);
+            ungetc('d',fin);
+            ungetc('n',fin);
+            ungetc('e',fin);
+            num_b++;
+            break;
+        }
     }//对分程序部分进行分析
-    //listcode(ADD,0,-syms[id0+1].value);///POP操作，将运行栈复原。
     id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
     listcode(END,cur_level_args_size,1);//结束语句,结束语句对应包括记录bp、lbp、ip以及返回值在内的多种操作
@@ -649,8 +693,15 @@ void func_dec(symbol sym){
         if(n==2){//end;时完成分程序分析，退出
             break;
         }
+        if(n==1){
+            ungetc('.',fin);
+            ungetc('d',fin);
+            ungetc('n',fin);
+            ungetc('e',fin);
+            num_b++;
+            break;
+        }
     }//对分程序部分进行分析
-    //listcode(ADD,0,syms[id0+1].value);//pop以保证栈平衡
     id0 = num_i;
     addr0 = addr;//函数段结束，基地址复位
     listcode(END,cur_level_args_size,2);
@@ -676,7 +727,6 @@ void pro_call(int n){
         error(num_l, 16);
     }
     token = get_sym();///分号
-    //listcode(ADD,0,i);//为参数申请空间
     listcode(CLL,0,p);//过程调用语句这里好像调用和跳转没啥区别。
 
     id0 = id00;///复位
@@ -699,7 +749,6 @@ void func_call(int n){//应包括跳转和将参数加载到运行栈两部分�
     if(i != (int)(syms[n + 1].value)){
         error(num_l, 9);
     }
-    //listcode(ADD,0,i);///为参数申请空间
     listcode(CAL,0,p);///函数调用
     id0 = id00;
 }
@@ -743,10 +792,8 @@ void writing(){
         token = get_sym();//字符串
         //printf("%s\n",token.name);
         syms[num_i++] = token;
-        printf("DEBUG!:%s ",token.name);
         listcode(WRT,0,num_i-1);///字符串录入符号表后根据其地址进行输出。
         token = get_sym();
-        printf("DEBUG:%s ",token.name);
         if(token.name[0]==','){
             expression();/////表达式处理不应该超出表达式
             listcode(WRT,0,-1);
@@ -1227,6 +1274,7 @@ symbol get_sym(){
     int j = sym.depth;
     i = num_i-1;
     while(i>=0){
+        //printf("DEBUG:%d",i);
         if(syms[i].depth==j){
             if(strcmp(sym.name,syms[i].name)==0){
                 break;
@@ -1334,10 +1382,6 @@ int main(){
         return 2;
     }
     fout1 = fopen("the_code.txt","w+");
-    //fprintf(fout,"Hello world\n");
-     //test_fout();
-    //fclose(fout);
-    //return 0;
     while(1){
         token0 = get_sym();
         n = statement(token0);
@@ -1345,10 +1389,9 @@ int main(){
             break;
         }
         i++;
-        //fprintf(fout,"%d %s %s\n",num_t,token0.type,token0.name);
-        //"%d\n",i);
+
     }
-    printf("end of file");
+    printf("end of file%d",num_b);
     fclose(fout1);
     if(num_b!=0){
         printf("%d unpaired begin-end\n",num_b);
@@ -1361,6 +1404,7 @@ int main(){
         printf("DONE\n");
     }
     fclose(fin);
+    fclose(fout);
 
 
     return 0;
