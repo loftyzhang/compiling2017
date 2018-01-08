@@ -1,5 +1,7 @@
 //compiling2017
 //一条咸鱼的自我救赎
+////先可能救赎不了了，文法读错了，分号的问题
+///有很多不严谨的地方，比如输出时的数据类型，比如读取关系运算符时关系运算符本身包含空格时，以及变量被重复声明的问题
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1333,7 +1335,7 @@ void listcode(enum code a,int b,float c){
     if(p0==999){
         error(num_l,1);
         token0 = get_sym();
-        printf("%s",token0.name);
+        printf("LISTCHECK:%s\n",token0.name);
         untoken(token0);
         return;//
     }
