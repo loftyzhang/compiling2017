@@ -298,7 +298,12 @@ int statement(symbol sym){
     int j = 0;
     int k = 0;
     symbol token;
-    if(strcmp(sym.name,"const")==0){
+    if(sym.name[0]==';'){
+        token = get_sym();
+        statement(sym);
+        return 0;
+    }
+    else if(strcmp(sym.name,"const")==0){
         fprintf(fout1,"this is a const declaration statement!\n");
         token = get_sym();
         const_dec(token);
@@ -351,29 +356,29 @@ int statement(symbol sym){
     }
     else if(strcmp(sym.name,"begin")==0){
         num_b++;
+        token = get_sym();
+        statement(token);//复合语句起始
+        return 0;
         //printf("CHECK NUM_B=%d\n",num_b);
-        return 4;//约等于跳过了begin
     }
     else if(strcmp(sym.name,"end")==0){
+        num_b--;
         token = get_sym();
         if(token.name[0]==46){///.
-            num_b--;
             //printf("CHECK NUM_B=%d\n",num_b);
             p0--;//最后一条指令的标记是p0
             return 1;///end of file
         }
-        else if(token.name[0] == 59){//end of a procedure or a function
-            num_b--;
+        else if(token.name[0] == 59){//表明一个语句结束，函数或过程的情形已经过滤
             //printf("CHECK NUM_B=%d\n",num_b);
-            return 2;
+            return 0;
         }
         else{
             for(i=strlen(token.name);i>0;i--){
                 ungetc(token.name[i-1],fin);
             }
-            num_b--;
             //printf("CHECK NUM_B=%d\n",num_b);
-            return 3;///普通复合语句的结尾
+            return 3;///复合语句的结尾,且后无新语句，这里不确定如何处理，先放着
         }
     }
     else if(strcmp(sym.type,"ident")==0){
@@ -390,13 +395,12 @@ int statement(symbol sym){
                 token = get_sym();///等号
                 if(token.name[0]=='('){//单独的函数调用语句
                     ungetc(40,fin);
-                    func_call(i);
-                    token = get_sym();//分号
+                    func_call(i);//函数调用分析部分不应超出参数表后的括号
                     return 0;///单独的函数调用语句
                 }
                 expression();//表达式处理
                 listcode(STO,0,0);//保存函数返回值到函数
-                token = get_sym();//分号
+                //对语句的处理不应超出语句本身
                 return 0;
             }//若为函数或过程则为调用语句，否则是赋值语句
             else{
@@ -407,17 +411,19 @@ int statement(symbol sym){
                     expression();
                     //printf("CUR_SYM:%s\n",sym.name);
                     //j = syms[id0+1].value;//取参数个数
-                    if(i>=0){///由于是赋值语句，不涉及对参数的赋值
-                        listcode(STO,num_d-syms[i].depth,syms[i].index);///根据偏移量保存值
-                    }
-                    else if(strcmp(token.kind,"const")==0){
+                    if((strcmp(sym.kind,"const")==0)||(strcmp(sym.kind,"args")==0)){//不应对常数或参数赋值，
+                        //参数这个是因为函数调用时参数变量并不存在，
                         error(num_l,19);
                         while(token.name[0]!=';'){
                             token = get_sym();
                         }
                     }
-                    else{
-                        error(num_l,6);
+                    else if(i>=0){
+                        listcode(STO,num_d-syms[i].depth,syms[i].index);///根据偏移量保存值
+                        return 0;
+                    }
+                    else{//未找到
+                        error(num_l,19);
                         printf("CHECK1:%d\n",i);
                         //printf("i=%d\n",(int)i);
                         //printf("%s %s\n",syms[2].name,syms[id0-1].name);
@@ -425,8 +431,6 @@ int statement(symbol sym){
                             token = get_sym();
                         }
                     }
-                    token = get_sym();//分号
-                    return 0;
                 }////这里还需要判断是否为函数或过程的调用语句
                 else if(token.name[0]=='['){//数组
                     fprintf(fout1,"this is a assignment statement!\n");
@@ -436,7 +440,7 @@ int statement(symbol sym){
                     expression();
                     //if(stack[tp-2]>syms[i].value) error(num_l,20);
                     listcode(SDD,num_d-syms[i].depth,syms[i].index);
-                    token = get_sym();//;
+                    return 0;
                 }
                 else{
                     printf("CHECK4:%s\n",sym.name);
@@ -596,6 +600,7 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
 void pro_dec(symbol sym){
     symbol token;
     symbol token1;
+    int num_B = num_b;
     int n = 0;
     int cur_level_args_size = 0;
     id0 = num_i;
@@ -636,18 +641,30 @@ void pro_dec(symbol sym){
     while(1){
         token1 = get_sym();
         //printf("%s\n",token1.name);
-        n = statement(token1);///0123
-        if(n==2){//end;时完成分程序分析，退出
-            break;
+        if(strcmp(token1.name,"begin")==0){
+                n = statement(token1);//会记录begin-end对数
         }
-        if(n==1){
-            ungetc('.',fin);
-            ungetc('d',fin);
-            ungetc('n',fin);
-            ungetc('e',fin);
-            num_b++;
-            break;
+        else if(strcmp(token1.name,"end")==0){
+            if(num_b==num_B){//用于判断是否到达函数结尾
+                num_b--;
+                token1 = get_sym();
+                if(token1.name[0]==';') break;//函数结尾
+                else if(token1.name[0]=='.'){
+                    ungetc('.',fin);
+                    ungetc('d',fin);
+                    ungetc('n',fin);
+                    ungetc('e',fin);//程序结尾，不管是不是非正常结尾吧，总应该结个尾
+                    break;
+                }
+                else{
+                    error(num_l,13);
+                    untoken(token1);//函数的分程序部分非正常结束
+                    break;
+                }
+            }
+            else n = statement(token1);///其他情况属于复合语句的end
         }
+        else n = statement(token1);//一般的语句
     }//对分程序部分进行分析
     id0 = num_i;
     addr0 = addr;////过程段结束，基地址复位
@@ -700,18 +717,31 @@ void func_dec(symbol sym){
     n = 10;//初始化n
     while(1){
         token1 = get_sym();
-        n = statement(token1);//0123
-        if(n==2){//end;时完成分程序分析，退出
-            break;
+        //printf("%s\n",token1.name);
+        if(strcmp(token1.name,"begin")==0){
+                n = statement(token1);//会记录begin-end对数
         }
-        if(n==1){
-            ungetc('.',fin);
-            ungetc('d',fin);
-            ungetc('n',fin);
-            ungetc('e',fin);
-            num_b++;
-            break;
+        else if(strcmp(token1.name,"end")==0){
+            if(num_b==num_B){//用于判断是否到达函数结尾
+                num_b--;
+                token1 = get_sym();
+                if(token1.name[0]==';') break;//函数结尾
+                else if(token1.name[0]=='.'){
+                    ungetc('.',fin);
+                    ungetc('d',fin);
+                    ungetc('n',fin);
+                    ungetc('e',fin);//程序结尾，不管是不是非正常结尾吧，总应该结个尾
+                    break;
+                }
+                else{
+                    error(num_l,13);
+                    untoken(token1);//函数的分程序部分非正常结束
+                    break;
+                }
+            }
+            else n = statement(token1);///其他情况属于复合语句的end
         }
+        else n = statement(token1);
     }//对分程序部分进行分析
     id0 = num_i;
     addr0 = addr;//函数段结束，基地址复位
@@ -737,9 +767,7 @@ void pro_call(int n){
     if(i != (int)(syms[n + 1].value)){
         error(num_l, 16);
     }
-    token = get_sym();///分号
     listcode(CLL,i,p);//过程调用语句这里好像调用和跳转没啥区别。
-
     id0 = id00;///复位
 }////在这一部分首先需要把实际参数加载入数据栈，然后再跳转，这里lod之前应该进行地址的声明
 void func_call(int n){//应包括跳转和将参数加载到运行栈两部分，仅处理到参数表结束
@@ -790,7 +818,6 @@ void reading(){///基于基地址进行变量的查找和赋值，变量名可�
             error(num_l, 18);
         }
     }
-    token = get_sym();///分号
 }////reading
 void writing(){
     symbol token;
@@ -817,7 +844,6 @@ void writing(){
         listcode(WRT, 0, -1);
         token = get_sym();
     }
-    token = get_sym();///语句结尾是分号
 }////writing
 void if_state(){
     symbol token;
@@ -1305,13 +1331,15 @@ symbol get_sym(){
         }
         i = i-1;
     }
-    if(strcmp(syms[i].kind, "procedure") == 0 || strcmp(syms[i].kind, "function") == 0){
+    if(i<=-1){///未找到
+        return -1;
+    }
+    else if(strcmp(syms[i].kind, "procedure") == 0 || strcmp(syms[i].kind, "function") == 0){
         return i;
     }
     else if(j>sym.depth-2){//判断查询结果是否复合解释执行算法，即调用层次差是否超过一级
         return i;
     }
-    return -5;
  }//position();需要注意的是在使用查询结果之前仍然需要对层次差进行计算，参数相关的是层次差为零，偏移量为负
 
 int search_rword(char* s){//保留字数组为字典序

@@ -51,7 +51,7 @@ begin
 		begin
 		write(" ",num[i]);
 		i := i+1
-		end
+		end;
 	while i<=4;
 	write("\n");
 	write("their average is:",average)
