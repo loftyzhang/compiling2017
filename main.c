@@ -99,6 +99,7 @@ void expression();//表达式，这里是做一个中缀变后缀的转换，然
 symbol get_sym();
 void listcode(enum code a,int b,float c);///a,b,c对应一条指令的三个参数
 int position(symbol sym);
+int pos_fp(int n);
 int search_rword(char* s);///确认sym是否是保留字，若是则返回其标号，不是则返回-1
 void interpret();///解释执行
 void untoken(symbol token);
@@ -133,7 +134,7 @@ void interpret(){
         //printf("%d ",ip);
         l = operand1[ip];
         a = operand2[ip];
-        //printf("%d ",ip);
+        printf("%d ",ip);
         //printf("CHECK:%d %f %f\n",lbp,stack[6],a);
         if(codes[ip]==LIT){
             stack[tp++] = a;//将常数移动到栈顶
@@ -597,7 +598,8 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
             }
         }
         else{///大概是多余的一句话
-            size = size + var_dec(token,type);
+            return size;
+            //size = size + var_dec(token,type);
         }
     }
     else if(strcmp(token.name,")")==0){
@@ -609,6 +611,7 @@ int var_dec(symbol sym,int type){////1 for var and 2 for args
 void pro_dec(symbol sym){
     symbol token;
     symbol token1;
+    int np = 0;
     int num_B = num_b;
     int n = 0;
     int cur_level_args_size = 0;
@@ -627,6 +630,8 @@ void pro_dec(symbol sym){
     syms[num_i] = zero;///这里保存参数个数，用零占位
     syms[num_i++].depth = num_d;
     token1 = get_sym();//开始参数表部分(40 41 91 93
+    np = p0;
+    //if(nest) listcode(JMP,0,0);//等回填
     if(token1.name[0]==40){///左括号，40
         token1 = get_sym();
         if(strcmp(token1.name,"var")==0){
@@ -644,7 +649,8 @@ void pro_dec(symbol sym){
             error(num_l,14);
         }
     }///参数表结束,将参数表为空的情况视为非法。参数表的相关语句在程序中从未被执行过，但是需要保留参数个数信息
-    syms[id0].value = p0;///将函数的入口设置为参数表之后的语句
+    //if(nest) listcode(ADD,0,-1*n);//抵消因参数表处理产生的代码
+    syms[id0].value = p0;///记录函数入口
     syms[id0+1].value = n;///保存参数个数
     n = 10;///为了避免误会，先把n初始化
     while(1){
@@ -673,6 +679,14 @@ void pro_dec(symbol sym){
             }
             else n = statement(token1);///其他情况属于复合语句的end
         }
+        else if(strcmp(token1.name,"function")==0||strcmp(token1.name,"procedure")==0){//嵌套定义
+            np = p0;
+            listcode(JMP,0,0);
+            //token1 = get_sym();
+            statement(token1);
+            operand2[np] = p0;//回填
+            fprintf(fout1,"%d_dec\n",p0);
+        }
         else n = statement(token1);//一般的语句
     }//对分程序部分进行分析
     id0 = num_i;
@@ -686,6 +700,7 @@ void func_dec(symbol sym){
     symbol token1;
     addr0 = addr;
     id0 = num_i;
+    int np = 0;
     int num_B = num_b;
     int n = 0;
     int cur_level_args_size = 0;
@@ -750,6 +765,14 @@ void func_dec(symbol sym){
                 }
             }
             else n = statement(token1);///其他情况属于复合语句的end
+        }
+        else if(strcmp(token1.name,"function")==0||strcmp(token1.name,"procedure")==0){//嵌套定义
+            np = p0;
+            listcode(JMP,0,0);
+            //token1 = get_sym();
+            statement(token1);
+            operand2[np] = p0;//回填
+            fprintf(fout1,"%d_dec\n",p0);
         }
         else n = statement(token1);
     }//对分程序部分进行分析
@@ -872,6 +895,7 @@ void if_state(){
     token = get_sym();//判断是否有else分支
     if(strcmp(token.name,"else")==0){
         operand2[source] = p0+1;//跳转到跳过else分支的语句之后即跳转到else分支
+        fprintf(fout1,"%d %d_if\n",source,p0+1);
         source = p0;//记录跳转语句位置
         listcode(JMP,0,0);//跳过else分支的语句
         do{
@@ -880,9 +904,11 @@ void if_state(){
         }
         while(num_b!=n);///根据begin-end是否匹配判定else后语句是否结束，同时解决了普通语句及复合语句
         operand2[source] = p0;///补全跳过else分支的语句
+        fprintf(fout1,"%d %d_else\n",source,p0);
     }
     else{//若没有else分支
         operand2[source] = p0;///若无else分支则跳过then分支
+        fprintf(fout1,"%d %d_then\n",source,p0);
         for(i=strlen(token.name);i>0;i--){
             ungetc(token.name[i-1],fin);////把多读的字符退回
         }
@@ -1016,7 +1042,7 @@ void factor(){
         }
         else {
             i = position(token);
-            j = syms[id0+1].value;//参数个数
+            j = 0;
             if(i < 0){
                 error(num_l, 17);
             }
@@ -1032,7 +1058,9 @@ void factor(){
                     listcode(LOD,num_d-syms[i].depth,syms[i].index);
                 }
                 else{//是参数
-                    listcode(LOD,0,-syms[id0+1].value-5+syms[i].index);
+                    j = pos_fp(i);
+                    listcode(LOD,0,-5+syms[i].index-syms[j+1].value);
+                    fprintf(fout1,"CHECK:%d %f\n",syms[i].index,syms[j+1].value);
                 }
             }
         }
@@ -1354,6 +1382,19 @@ symbol get_sym(){
     else return -1;
  }//position();需要注意的是在使用查询结果之前仍然需要对层次差进行计算，参数相关的是层次差为零，偏移量为负
 
+int pos_fp(int n){
+    int i = n;
+    while(i>=0){
+        if(strcmp(syms[i].kind,"procedure")==0||strcmp(syms[i].kind,"function")==0)
+            break;
+        i--;
+    }
+    if(i<0){
+        i = 0;
+    }
+    return i;
+}
+
 int search_rword(char* s){//保留字数组为字典序
     int high,low,mid;
     high = norw-1;
@@ -1428,9 +1469,9 @@ int main(){
     reserved[20]= "write";
 
     printf("Please enter the name of file to compile.\n");//使用绝对路径
-    scanf("%s",fname);
-    if((fin = fopen(fname,"r"))==NULL){
-    //if((fin= fopen("1.txt","r"))==NULL){
+    //scanf("%s",fname);
+    //if((fin = fopen(fname,"r"))==NULL){
+    if((fin= fopen("3.txt","r"))==NULL){
         printf("Open failed");
         return 1;
     }
@@ -1445,6 +1486,7 @@ int main(){
         if(n == 1){
             break;
         }
+        //printf("%d",i)
         i++;
     }
     printf("end of file %d\n",num_b);

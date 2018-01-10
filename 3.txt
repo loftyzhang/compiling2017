@@ -32,6 +32,8 @@ function getaverage (nn:integer):real;
 	end;
 function difference(a,b:integer):integer;
 	var result:integer;
+	write(" ",a);
+	write(" ",b);
 	function more(a,b:integer):integer;
 		var c:integer;
 		begin
@@ -48,7 +50,7 @@ function difference(a,b:integer):integer;
 		if a>b then
 			difference := more(a,b)
 		else
-			difference := less(b,a)
+			difference := less(a,b)
 	end;
 begin
 	i:=0;
@@ -68,7 +70,5 @@ begin
 		i := i+1
 		end;
 	while i<=4;
-	write("\n");
-	write("their average is:",average);
 	write("the difference is:",difference(num[0],num[1]))
 end.
