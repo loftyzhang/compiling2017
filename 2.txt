@@ -20,8 +20,7 @@ procedure sorting (a,b,c,d,e:integer);
 				t := num[i];
 				num[i] := num[j];
 				num[j] := t
-			end;
-	write(n)
+			end
 	end; 
 function getaverage (nn:integer):real;
 	var i:integer;

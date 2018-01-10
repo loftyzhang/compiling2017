@@ -298,11 +298,11 @@ int statement(symbol sym){
     int j = 0;
     int k = 0;
     symbol token;
-    if(sym.name[0]==';'){
-        token = get_sym();
-        statement(sym);
+    //printf("%s\n",sym.name);
+    if(sym.name[0]==';'){//约等于跳过分号
         return 0;
     }
+    else if(strcmp(sym.name,"EOF")==0) return 1;
     else if(strcmp(sym.name,"const")==0){
         fprintf(fout1,"this is a const declaration statement!\n");
         token = get_sym();
@@ -363,9 +363,9 @@ int statement(symbol sym){
     }
     else if(strcmp(sym.name,"end")==0){
         num_b--;
+        //printf("CHECK NUM_B=%d\n",num_b);
         token = get_sym();
-        if(token.name[0]==46){///.
-            //printf("CHECK NUM_B=%d\n",num_b);
+        if(token.name[0]=='.'){///.b
             p0--;//最后一条指令的标记是p0
             return 1;///end of file
         }
@@ -468,12 +468,19 @@ int statement(symbol sym){
 void const_dec(symbol sym){
     symbol token;
     symbol token1;
+    int flag = 1;
     strcpy(token.name,sym.name);
     get_sym();///等号
-    token1 = get_sym();//常量的值
+    token1 = get_sym();//常量的值或正负号
+    //printf("CHECK:const1\n");
+    if(strcmp(token1.type,"adding")==0){
+        if(token1.name[0]=='-') flag = -1;
+        token1 = get_sym();
+    }
+    //printf("CHECK:const2\n");
     strcpy(token.type,token1.type);
     strcpy(token.kind,"const");
-    token.value = token1.value;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
+    token.value = token1.value*flag;//对字符，将其值保存在value中，读取的token名称是单个字符组成的字符
     //token.level = id0;///记录声明位置
     token.depth = num_d;
     token.addr = addr;
@@ -486,6 +493,8 @@ void const_dec(symbol sym){
         token = get_sym();
         const_dec(token);///若连续声明则递归调用
     }
+    else untoken(token);//若为分号则结束常量声明
+
 }///const_Dec常量的值直接写入内存，故不会有相应指令。。。。
 int var_dec(symbol sym,int type){////1 for var and 2 for args
     symbol token;
@@ -645,7 +654,7 @@ void pro_dec(symbol sym){
                 n = statement(token1);//会记录begin-end对数
         }
         else if(strcmp(token1.name,"end")==0){
-            if(num_b==num_B){//用于判断是否到达函数结尾
+            if(num_b==num_B+1){//用于判断是否到达函数结尾
                 num_b--;
                 token1 = get_sym();
                 if(token1.name[0]==';') break;//函数结尾
@@ -677,6 +686,7 @@ void func_dec(symbol sym){
     symbol token1;
     addr0 = addr;
     id0 = num_i;
+    int num_B = num_b;
     int n = 0;
     int cur_level_args_size = 0;
     token = sym;
@@ -722,7 +732,7 @@ void func_dec(symbol sym){
                 n = statement(token1);//会记录begin-end对数
         }
         else if(strcmp(token1.name,"end")==0){
-            if(num_b==num_B){//用于判断是否到达函数结尾
+            if(num_b==num_B+1){//用于判断是否到达函数结尾
                 num_b--;
                 token1 = get_sym();
                 if(token1.name[0]==';') break;//函数结尾
@@ -1309,6 +1319,7 @@ symbol get_sym(){
         case 93:strcpy(token.name,"]");strcpy(token.type,"rsqbra");token.value = 0;break;///右方括号
         default:n = 0;break;
     }
+    //printf("%s\n",token.name);
     return token;
  }
 
@@ -1340,6 +1351,7 @@ symbol get_sym(){
     else if(j>sym.depth-2){//判断查询结果是否复合解释执行算法，即调用层次差是否超过一级
         return i;
     }
+    else return -1;
  }//position();需要注意的是在使用查询结果之前仍然需要对层次差进行计算，参数相关的是层次差为零，偏移量为负
 
 int search_rword(char* s){//保留字数组为字典序
@@ -1434,10 +1446,10 @@ int main(){
             break;
         }
         i++;
-
     }
-    printf("end of file%d",num_b);
+    printf("end of file %d\n",num_b);
     fclose(fout1);
+    fclose(fin);
     if(num_b!=0){
         printf("%d unpaired begin-end\n",num_b);
     }
@@ -1448,7 +1460,7 @@ int main(){
         interpret();
         printf("DONE\n");
     }
-    fclose(fin);
+
     fclose(fout);
 
 

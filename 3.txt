@@ -60,7 +60,7 @@ begin
 	num[3] := d;
 	num[4] := e;
 	sorting(i);
-	average = getaverage(i);
+	average := getaverage(i);
 	write("here are the results:\n");
 	do
 		begin
