@@ -119,7 +119,7 @@ void interpret(){
         l = operand1[ip];
         a = operand2[ip];
         printf("%d ",ip);
-        printf("CHECK:%d %f\n",tp,stack[tp-1]);
+        //printf("CHECK:%d %f\n",tp,stack[tp-1]);
          if(codes[ip]==ADD){
             tp = tp + (int)a;
             ip++;
@@ -1221,6 +1221,11 @@ symbol get_sym(){
     else if(c == 34){///双引号
         char s[100];
         while((c = fgetc(fin))!='"'){
+            if(c=='\\'){
+                c = fgetc(fin);
+                if (c=='n') c = '\n';
+                else if(c=='t') c = '\t';
+            }
             s[i++] = c;
             //printf("%d %d\n",i,c);
 
@@ -1233,6 +1238,11 @@ symbol get_sym(){
     }
     else if(c == 39){///单引号
         c = fgetc(fin);
+        if(c=='\\'){
+            c = fgetc(fin);
+            if (c=='n') c = '\n';
+            else if(c=='t') c = '\t';
+        }
         token.name[0] = c;
         token.name[1] = '\0';
         strcpy(token.type,"char");//////字符
