@@ -128,7 +128,8 @@ void interpret(){
             continue;
         }
         else{
-            printf("WTF\n");
+            break;
+            //printf("WTF\n");
         }
     }
     ip = p1;
@@ -415,17 +416,18 @@ int statement(symbol sym){
             else{
                 token = get_sym();
                 i = position(sym);
+                //printf("%s\n",sym.name);
                 if(strcmp(token.type,"assignment")==0){///赋值语句肯定是分号结尾没跑了
                     fprintf(fout1,"this is a assignment statement!\n");
                     expression();
                     //printf("CUR_SYM:%s\n",sym.name);
                     //j = syms[id0+1].value;//取参数个数
-                    if((strcmp(sym.kind,"const")==0)||(strcmp(sym.kind,"args")==0)){//不应对常数或参数赋值，
+                    if((strcmp(syms[i].kind,"const")==0)||(strcmp(syms[i].kind,"args")==0)){//不应对常数或参数赋值，
                         //参数这个是因为函数调用时参数变量并不存在，
                         error(num_l,19);
-                        while(token.name[0]!=';'){
+                        /*while(token.name[0]!=';'){
                             token = get_sym();
-                        }
+                        }*///这里没必要跳过，已经用表达式跳到句子结尾了。
                     }
                     else if(i>=0){
                         listcode(STO,num_d-syms[i].depth,syms[i].index);///根据偏移量保存值
@@ -465,6 +467,7 @@ int statement(symbol sym){
             }*/
         }
     }
+    else error(num_l,6);///如句子开头是一个常量等
     return -1;
 }
 /* 预计若为标识符，则是赋值,因为不支持隐式声明，相应的应给出错误类型
@@ -1107,7 +1110,10 @@ void item(){
     factor();
     token = get_sym();
     while(strcmp(token.type,"multiplying") == 0){
-        if(token.name[0] == '/') isDiv = 1;
+        if(token.name[0] == '/'){
+            isDiv = 1;
+        }
+        else if(token.name[0] == '*') isDiv = 0;
         factor();
         if(isDiv) listcode(OPR, 0, 3);
         else listcode(OPR, 0, 2);
@@ -1498,9 +1504,9 @@ int main(){
     reserved[20]= "write";
 
     printf("Please enter the name of file to compile.\n");//使用绝对路径
-    //scanf("%s",fname);
-    //if((fin = fopen(fname,"r"))==NULL){
-    if((fin= fopen("3.txt","r"))==NULL){
+    scanf("%s",fname);
+    if((fin = fopen(fname,"r"))==NULL){
+    //if((fin= fopen("3.txt","r"))==NULL){
         printf("Open failed");
         return 1;
     }
