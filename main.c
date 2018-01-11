@@ -45,6 +45,7 @@ int id00 = 0;//上一级模块在符号表的起始地址
 int p0 = 0;///解释执行的pcode下标
 int p1 = 0;///解释执行的下一条pcode
 int p2 = 0;
+int is_real = 0;//判断是否为实数
 
 //int suf_i = 0;//用于表达式处理,结果栈的编号
 float vm[1000] = {0};//模拟的地址空间-addr
@@ -113,6 +114,7 @@ void interpret(){
     int bp = 0;///当前分程序数据区的起始地址
     int lbp = 0;///上一分程序的数据区基地址
     int l = 0;
+    int n = 0;
     float a = 0;
     float eax = 0;//用于保存返回值
     while(ip>=0&&ip<p2){
@@ -234,7 +236,13 @@ void interpret(){
         }
         else if(codes[ip]==WRT){///栈顶内容数据类型未知
             if((int)a==-1){
-                fprintf(fout,"%f",stack[--tp]);
+                printf("DEBUG:%f\n",stack[tp-2]);
+                if(stack[tp-1]==1) fprintf(fout,"%f",stack[tp-2]);
+                else if(stack[tp-1]==0){
+                    n = (int)stack[tp-2];
+                    fprintf(fout,"%d",n);
+                }
+                tp = tp-2;
             }
             else fprintf(fout,"%s",syms[(int)a].name);
             //printf("%s",syms[0].name);
@@ -867,6 +875,9 @@ void writing(){
         token = get_sym();
         if(token.name[0]==','){
             expression();/////表达式处理不应该超出表达式
+            if(is_real) listcode(LIT,0,1);
+            else listcode(LIT,0,0);
+            is_real = 0;
             listcode(WRT,0,-1);
             token = get_sym();///括号
         }
@@ -874,6 +885,9 @@ void writing(){
     else{
         ungetc(c, fin);
         expression();
+        if(is_real) listcode(LIT,0,1);
+        else listcode(LIT,0,0);
+        is_real = 0;
         listcode(WRT, 0, -1);
         token = get_sym();
     }
@@ -1019,6 +1033,7 @@ void factor(){
         listcode(LIT, 0, token.value);
     }
     else if(strcmp(token.type, "real") == 0){
+        is_real = 1;
         listcode(LIT, 0, token.value);
     }
     else if(strcmp(token.type, "integer") == 0){
@@ -1033,11 +1048,13 @@ void factor(){
             error(num_l,17);
         }
         else if(strcmp(syms[i].kind,"function")==0){
+            if(strcmp(syms[i].type,"real")==0) is_real = 1;
             func_call(i);
         }
         else if(strcmp(syms[i].kind,"const")==0){
             i = position(token);
             i = syms[i].value;
+            if(strcmp(syms[i].type,"real")==0) is_real = 1;
             listcode(LIT,0,i);
         }
         else {
@@ -1050,11 +1067,13 @@ void factor(){
                 token = get_sym();//[
                 expression();
                 token = get_sym();//]
+                if(strcmp(syms[i].type,"real")==0) is_real = 1;
                 //if(stack[tp-1]>syms[i].value) error(num_l,20);
                 listcode(LDD,num_d-syms[i].depth,syms[i].index);
             }
             else{
                 if(strcmp(syms[i].kind,"var")==0){//不是参数,即为变量
+                    if(strcmp(syms[i].type,"real")==0) is_real = 1;
                     listcode(LOD,num_d-syms[i].depth,syms[i].index);
                 }
                 else{//是参数
